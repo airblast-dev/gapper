@@ -141,6 +141,7 @@ impl GapText {
         let mut left_shift = 0;
         let mut right_shift = 0;
         let (src_addr_offset, dst_addr_offset, copy_count): (usize, usize, usize) =
+            // The conditions should be cleaned up.
             if self.gap.contains(&to) {
                 let copy_count = to - self.gap.start;
                 right_shift = copy_count;
@@ -153,10 +154,10 @@ impl GapText {
                 && to - self.gap.start <= self.gap.len()
             {
                 // TODO: test the branch
-                dbg!(&self.gap);
                 let copy_count = to - self.gap.start;
                 right_shift = copy_count;
                 (self.gap.end, self.gap.start, copy_count)
+            // add check to see if copy will fit in the gap
             } else if to < self.gap.start && self.gap.start - to <= self.gap.len() {
                 let copy_count = self.gap.start - to;
                 left_shift = copy_count;
@@ -185,10 +186,6 @@ impl GapText {
             panic!("len is {}, but pointer offset is {}", len, max_offset);
         }
 
-        dbg!(to);
-        dbg!(copy_count);
-        dbg!(src_addr_offset);
-        dbg!(dst_addr_offset);
         if self.buf.len() <= src_addr_offset.max(dst_addr_offset) + copy_count
             || src_addr_offset.abs_diff(dst_addr_offset) < copy_count
         {
@@ -196,6 +193,11 @@ impl GapText {
             invalid_offset(self.buf.len(), src_addr_offset, dst_addr_offset);
         }
 
+        // we do not strictly have to use unsafe to accomplish this
+        // it does remove a bunch of boiler plate code as otherwise we have to do a bunch of
+        // panicy operations in the conditions above. 
+        //
+        // Instead we do a few checks and do a fast copy.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.buf.as_ptr().add(src_addr_offset),
@@ -247,6 +249,8 @@ mod tests {
 
     use super::GapText;
 
+    // TODO: split this into multiple cases or their own functions.
+    // This takes wayyy to long to run with miri (less of a problem without miri but still slow).
     #[test]
     fn move_gap_start() -> Result<(), GapError> {
         let sample = String::from_utf8((0..128).collect()).unwrap().repeat(10);
