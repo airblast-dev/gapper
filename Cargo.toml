@@ -1,0 +1,10 @@
+[package]
+name = "gapstr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+memchr = { version = "2.7.4" }
+
+[dev-dependencies]
+rstest = "0.23.0"
