@@ -1,10 +1,8 @@
-mod eol_indexes;
-mod lines;
 mod utils;
+mod slice;
 
-use std::ops::{Index, Range};
+use std::ops::Range;
 
-use eol_indexes::EolIndexes;
 use utils::u8_is_char_boundry;
 
 const DEFAULT_GAP_SIZE: usize = 512;
@@ -42,11 +40,11 @@ impl GapText {
         }
     }
 
-    fn gap_size(&self) -> usize {
+    fn base_gap_size(&self) -> usize {
         self.base_gap_size
     }
 
-    fn set_gap_size(&mut self, gap_size: usize) {
+    fn set_base_gap_size(&mut self, gap_size: usize) {
         self.base_gap_size = gap_size;
     }
 
@@ -189,7 +187,7 @@ impl GapText {
                         self.buf[self.gap.start..to + self.gap.len()].rotate_left(self.gap.len());
                         self.shift_gap_right(to - self.gap.start);
                     }
-                     
+
                     return Ok(());
                 }
             };
