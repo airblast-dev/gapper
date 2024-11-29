@@ -138,64 +138,88 @@ impl GapText {
             });
         }
 
+        enum SurroundsDirection {
+            Right(usize),
+            Left(usize),
+            False,
+        }
+
+        #[inline(always)]
+        fn surrounds_gap_range(gap: &Range<usize>, pos: usize) -> SurroundsDirection {
+            if gap.start < pos
+                && gap.end.saturating_add(gap.len()) > pos
+                && pos - gap.start <= gap.len()
+            {
+                SurroundsDirection::Right(pos - gap.start)
+            } else if pos < gap.start
+                && gap.start.saturating_sub(gap.len()) <= pos
+                && gap.start - pos <= gap.len()
+            {
+                SurroundsDirection::Left(gap.start - pos)
+            } else {
+                SurroundsDirection::False
+            }
+        }
+
         let mut left_shift = 0;
         let mut right_shift = 0;
-        let (src_addr_offset, dst_addr_offset, copy_count): (usize, usize, usize) =
-            // The conditions should be cleaned up.
-            if self.gap.contains(&to) {
-                let copy_count = to - self.gap.start;
-                right_shift = copy_count;
-                (self.gap.end, self.gap.start, copy_count)
-            } else if self.gap.end < to
-                && to < self.gap.end + self.gap.len()
-                && self.gap.start < to
-                // we do this check to be able to use `std::ptr::copy_nonoverlapping` below.
-                // if this condition is the one that returns false it will go to the fallback
-                && to - self.gap.start <= self.gap.len()
-            {
-                // TODO: test the branch
-                let copy_count = to - self.gap.start;
-                right_shift = copy_count;
-                (self.gap.end, self.gap.start, copy_count)
-            // add check to see if copy will fit in the gap
-            } else if to < self.gap.start && self.gap.start - to <= self.gap.len() {
-                let copy_count = self.gap.start - to;
-                left_shift = copy_count;
-                (to, self.gap.end - copy_count, copy_count)
-            } else {
-                // cant take any shortcuts use fallback
-                //
-                // this probably could be slightly more optimized since we dont actually have to
-                // move the gap, we just need to copy the values from the position that the gap
-                // range will be set to
-                if self.gap.start > to {
-                    self.buf[to..self.gap.end].rotate_right(self.gap.len());
-                    self.shift_gap_left(self.gap.start - to);
-                } else {
-                    self.buf[self.gap.start..to + self.gap.len()].rotate_left(self.gap.len());
-                    self.shift_gap_right(to - self.gap.start);
-                }
 
-                return Ok(());
+        let (src_addr_offset, dst_addr_offset, copy_count): (usize, usize, usize) =
+            match surrounds_gap_range(&self.gap, to) {
+                SurroundsDirection::Right(r) => {
+                    let copy_count = r;
+                    right_shift = r;
+                    (self.gap.end, self.gap.start, copy_count)
+                }
+                SurroundsDirection::Left(l) => {
+                    let copy_count = l;
+                    left_shift = l;
+                    (to, self.gap.end - copy_count, copy_count)
+                }
+                SurroundsDirection::False => {
+                    // cant take any shortcuts use fallback
+                    //
+                    // this probably could be slightly more optimized since we dont actually have to
+                    // move the gap, we just need to copy the values from the position that the gap
+                    // range will be set to
+                    if self.gap.start > to {
+                        self.buf[to..self.gap.end].rotate_right(self.gap.len());
+                        self.shift_gap_left(self.gap.start - to);
+                    } else {
+                        self.buf[self.gap.start..to + self.gap.len()].rotate_left(self.gap.len());
+                        self.shift_gap_right(to - self.gap.start);
+                    }
+                     
+                    return Ok(());
+                }
             };
 
         #[cold]
         #[inline(never)]
-        fn invalid_offset(len: usize, src_offset: usize, dst_offset: usize) -> ! {
-            let max_offset = src_offset.max(dst_offset);
-            panic!("len is {}, but pointer offset is {}", len, max_offset);
+        fn invalid_offset(
+            len: usize,
+            src_offset: usize,
+            dst_offset: usize,
+            copy_count: usize,
+        ) -> ! {
+            panic!(
+                "pointers should never overlap when copying, \
+                len is {}, source pointer offset is {}, destination \
+                pointer offset is {} with a copy count of {}",
+                len, src_offset, dst_offset, copy_count
+            );
         }
 
         if self.buf.len() <= src_addr_offset.max(dst_addr_offset) + copy_count
             || src_addr_offset.abs_diff(dst_addr_offset) < copy_count
         {
             // this should never run, in case a bug is present above this avoids undefined behavior
-            invalid_offset(self.buf.len(), src_addr_offset, dst_addr_offset);
+            invalid_offset(self.buf.len(), src_addr_offset, dst_addr_offset, copy_count);
         }
 
         // we do not strictly have to use unsafe to accomplish this
         // it does remove a bunch of boiler plate code as otherwise we have to do a bunch of
-        // panicy operations in the conditions above. 
+        // panicy operations in the conditions above.
         //
         // Instead we do a few checks and do a fast copy.
         unsafe {
@@ -211,10 +235,13 @@ impl GapText {
         Ok(())
     }
 
+    #[inline(always)]
     fn shift_gap_right(&mut self, by: usize) {
         self.gap.start += by;
         self.gap.end += by;
     }
+
+    #[inline(always)]
     fn shift_gap_left(&mut self, by: usize) {
         self.gap.start -= by;
         self.gap.end -= by;
