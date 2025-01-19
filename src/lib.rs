@@ -1,8 +1,13 @@
-mod utils;
 mod slice;
+mod utils;
 
-use std::ops::Range;
+use core::str;
+use std::{
+    ops::{Bound, Index, Range, RangeBounds},
+    slice::SliceIndex,
+};
 
+use slice::GapSlice;
 use utils::u8_is_char_boundry;
 
 const DEFAULT_GAP_SIZE: usize = 512;
@@ -262,6 +267,69 @@ impl GapText {
         } else {
             self.gap.len() + byte_pos
         }
+    }
+
+    fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
+        // 4 cases to handle
+        // - gap range contains range
+        // - gap start is in range
+        // - gap end is in range
+        // - gap range is before range
+        // - gap range is after range
+        let start = match r.start_bound() {
+            Bound::Unbounded => 0,
+            Bound::Excluded(i) => i.saturating_sub(1),
+            Bound::Included(i) => *i,
+        };
+        let end = match r.end_bound() {
+            Bound::Unbounded => self.buf.len() - self.gap.len(),
+            Bound::Excluded(i) => i.saturating_sub(1).min(start),
+            Bound::Included(i) => *i,
+        };
+
+        assert!(start <= end);
+        if end < self.gap.start {
+            if !u8_is_char_boundry(self.buf[start]) && !u8_is_char_boundry(self.buf[end]) {
+                return None;
+            } else {
+                return Some(GapSlice::Single(unsafe {
+                    str::from_utf8_unchecked(&self.buf[start..=end])
+                }));
+            }
+        }
+
+        if self.gap.end <= start {
+            if !u8_is_char_boundry(self.buf[start]) {
+                return None;
+            } else {
+                return Some(GapSlice::Single(unsafe {
+                    str::from_utf8_unchecked(
+                        &self.buf[start + self.gap.len()..=end + self.gap.len()],
+                    )
+                }));
+            }
+        }
+
+        if start <= self.gap.start && end < self.gap.end {
+            let first_start = self.gap.start - (self.gap.start - start);
+            let second_end = self.gap.end + (self.gap.end - end);
+            unsafe {
+                let first = str::from_utf8_unchecked(&self.buf[first_start..self.gap.start]);
+                let second = str::from_utf8_unchecked(&self.buf[self.gap.end..=second_end]);
+                return Some(GapSlice::Spaced(first, second));
+            }
+        }
+
+        if self.gap.start < start && end <= self.gap.end {
+            let second_end = self.gap.end + (self.gap.end - end);
+            unsafe {
+                let first = str::from_utf8_unchecked(&self.buf[start..self.gap.start]);
+                let second = str::from_utf8_unchecked(&self.buf[self.gap.end..=second_end]);
+                return Some(GapSlice::Spaced(first, second));
+            }
+        }
+
+        None
     }
 }
 

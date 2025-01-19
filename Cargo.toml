@@ -7,4 +7,4 @@ edition = "2021"
 memchr = { version = "2.7.4" }
 
 [dev-dependencies]
-rstest = "0.23.0"
+rstest = "0.24.0"
