@@ -445,13 +445,13 @@ mod tests {
         t.insert_gap(64);
         for gs in 0..1270 {
             t.move_gap_start_to(gs)?;
-            t.buf[t.gap.clone()].fill(0);
+            t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
         for gs in (0..1270).rev() {
             t.move_gap_start_to(gs)?;
-            t.buf[t.gap.clone()].fill(0);
+            t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
