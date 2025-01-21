@@ -425,26 +425,31 @@ fn is_get_char_boundry(buf: &[u8], b1: u8, end_index: usize) -> bool {
 #[cfg(test)]
 mod tests {
 
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
     use crate::{GapError, DEFAULT_GAP_SIZE};
 
     use super::GapText;
+    #[fixture]
+    #[once]
+    fn large_str() -> String {
+        String::from_utf8((1..128).collect()).unwrap().repeat(10)
+    }
 
     // TODO: split this into multiple cases or their own functions.
     // This takes wayyy to long to run with miri (less of a problem without miri but still slow).
-    #[test]
-    fn move_gap_start() -> Result<(), GapError> {
-        let sample = String::from_utf8((0..128).collect()).unwrap().repeat(10);
-        let mut t = GapText::new(sample.clone());
+    #[rstest]
+    fn move_gap_start(large_str: &str) -> Result<(), GapError> {
+        let sample = large_str;
+        let mut t = GapText::new(large_str.to_string());
         t.insert_gap(64);
-        for gs in 0..1280 {
+        for gs in 0..1270 {
             t.move_gap_start_to(gs)?;
             t.buf[t.gap.clone()].fill(0);
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
-        for gs in (0..1280).rev() {
+        for gs in (0..1270).rev() {
             t.move_gap_start_to(gs)?;
             t.buf[t.gap.clone()].fill(0);
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
