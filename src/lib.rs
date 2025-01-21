@@ -257,8 +257,17 @@ impl GapText {
     }
 
     #[inline(always)]
-    fn byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
+    fn start_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
         if gap.start > byte_pos {
+            byte_pos
+        } else {
+            gap.len() + byte_pos
+        }
+    }
+
+    #[inline(always)]
+    fn end_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
+        if gap.start >= byte_pos {
             byte_pos
         } else {
             gap.len() + byte_pos
@@ -339,8 +348,8 @@ impl GapText {
             return None;
         }
 
-        let start_with_offset = Self::byte_pos_with_offset(gap.clone(), start);
-        let end_with_offset = Self::byte_pos_with_offset(gap.clone(), end);
+        let start_with_offset = Self::start_byte_pos_with_offset(gap.clone(), start);
+        let end_with_offset = Self::end_byte_pos_with_offset(gap.clone(), end);
 
         debug_assert!(start_with_offset <= end_with_offset);
 
@@ -363,7 +372,10 @@ impl GapText {
         }
 
         debug_assert_eq!(start_with_offset, start);
-        debug_assert_ne!(end, end_with_offset);
+
+        // when the base gap value is 0 the end and end_with_offset maybe equal since a gap is not
+        // inserted yet
+        debug_assert!(end != end_with_offset || gap.is_empty());
 
         unsafe {
             let first = str::from_utf8_unchecked(&buf[start_with_offset..gap.start]);
@@ -496,5 +508,76 @@ mod tests {
         assert_eq!(std::str::from_utf8(&t.buf[t.gap.end..]).unwrap(), "d");
         assert_eq!(t.gap.len(), gap_size + 8);
         Ok(())
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::small_gap(1)]
+    #[case::small_gap(2)]
+    #[case::small_gap(3)]
+    #[case::medium_gap(128)]
+    #[case::large(512)]
+    fn get(#[case] gap_size: usize) {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
+        t.insert_gap(2);
+
+        let s = t.get(0..4).unwrap();
+        assert_eq!(s, "Hell");
+        let s = t.get(0..2).unwrap();
+        assert_eq!(s, "He");
+        let s = t.get(2..5).unwrap();
+        assert_eq!(s, "llo");
+        let s = t.get(3..9).unwrap();
+        assert_eq!(s, "lo, Wo");
+        let s = t.get(9..).unwrap();
+        assert_eq!(s, "rld");
+        let s = t.get(..).unwrap();
+        assert_eq!(s, "Hello, World");
+        let s = t.get(..12).unwrap();
+        assert_eq!(s, "Hello, World");
+        assert!(t.get(..15).is_none());
+        assert!(t.get(25..).is_none());
+        assert!(t.get(0..13).is_none());
+        assert!(t.get(3..14).is_none());
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::small_gap(1)]
+    #[case::small_gap(2)]
+    #[case::small_gap(3)]
+    #[case::medium_gap(128)]
+    #[case::large(512)]
+    fn get_insert(#[case] gap_size: usize) {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
+        t.insert_gap(2);
+
+        // "HeApplesllo, World"
+        t.insert(2, "Apples").unwrap();
+        let s = t.get(0..4).unwrap();
+        assert_eq!(s, "HeAp");
+        let s = t.get(2..10).unwrap();
+        assert_eq!(s, "Applesll");
+        let s = t.get(10..10).unwrap();
+        assert_eq!(s, "");
+        let s = t.get(10..15).unwrap();
+        assert_eq!(s, "o, Wo");
+        let s = t.get(..).unwrap();
+        assert_eq!(s, "HeApplesllo, World");
+
+        // "HeApplesOrangesllo, World"
+        t.insert(8, "Oranges").unwrap();
+        let s = t.get(0..4).unwrap();
+        assert_eq!(s, "HeAp");
+        let s = t.get(2..10).unwrap();
+        assert_eq!(s, "ApplesOr");
+        let s = t.get(10..10).unwrap();
+        assert_eq!(s, "");
+        let s = t.get(10..15).unwrap();
+        assert_eq!(s, "anges");
+        let s = t.get(..).unwrap();
+        assert_eq!(s, "HeApplesOrangesllo, World");
     }
 }
