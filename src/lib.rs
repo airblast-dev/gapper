@@ -2,12 +2,8 @@ mod slice;
 mod utils;
 
 use core::str;
-use std::{
-    mem::MaybeUninit,
-    ops::{Bound, Range, RangeBounds},
-};
+use std::ops::{Bound, Range, RangeBounds};
 
-use polonius_the_crab::{exit_polonius, polonius, polonius_return, polonius_try};
 use slice::GapSlice;
 use utils::u8_is_char_boundry;
 
@@ -261,57 +257,17 @@ impl GapText {
     }
 
     #[inline(always)]
-    fn byte_pos_with_offset(&self, byte_pos: usize) -> usize {
-        if self.gap.start > byte_pos {
+    fn byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
+        if gap.start > byte_pos {
             byte_pos
         } else {
-            self.gap.len() + byte_pos
+            gap.len() + byte_pos
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
-        let s_len = self.buf.len() - self.gap.len();
-
-        let Range { start, end } = get_range(s_len, r);
-
-        // check the range values
-        if start > end || s_len < end {
-            return None;
-        }
-
-        let start_with_offset = self.byte_pos_with_offset(start);
-        let end_with_offset = self.byte_pos_with_offset(end);
-
-        debug_assert!(start_with_offset <= end_with_offset);
-
-        // perform char boundry check
-        if !is_get_char_boundry(&self.buf, self.buf[start_with_offset], end_with_offset) {
-            return None;
-        }
-
-        // handles all of the single piece conditions
-        // Range before gap case, Range after gap case, and start in gap case
-        //
-        // after this check
-        // - start_with_offset == start
-        // - start < self.gap.start
-        // - self.gap.start < end
-        if is_get_single(self.gap.start, start, end) {
-            return Some(GapSlice::Single(unsafe {
-                str::from_utf8_unchecked(&self.buf[start_with_offset..end_with_offset])
-            }));
-        }
-
-        debug_assert_eq!(start_with_offset, start);
-        debug_assert_ne!(end, end_with_offset);
-
-        unsafe {
-            let first = str::from_utf8_unchecked(&self.buf[start_with_offset..self.gap.start]);
-            let second = str::from_utf8_unchecked(&self.buf[self.gap.end..end_with_offset]);
-
-            Some(GapSlice::Spaced(first, second))
-        }
+        Self::get_raw(&self.buf, self.gap.clone(), r)
     }
 
     #[inline]
@@ -319,32 +275,32 @@ impl GapText {
         let r = get_range(self.buf.len() - self.gap.len(), r);
         let read_len = r.len();
 
-        let mut gapstr = self;
-        // TODO: maybe remove usage of polonius and use unsafe instead?
-        polonius! {
-            |gapstr| -> Option<&'polonius str> {
-                if let GapSlice::Single(s) = polonius_try!(gapstr.get(r.start..r.end)) {
-                    polonius_return!(Some(s));
-                }
-                exit_polonius!()
-            }
+        let buf = self.buf.as_ptr();
+        if let GapSlice::Single(s) = Self::get_raw(
+            unsafe { core::slice::from_raw_parts(buf, self.buf.len()) },
+            self.gap.clone(),
+            r.clone(),
+        )? {
+            return Some(s);
         }
 
-        let buf = if gapstr.gap.len() > read_len {
-            &mut gapstr.buf[gapstr.gap.start..gapstr.gap.start + read_len]
-        } else if gapstr.buf.capacity() - gapstr.buf.len() > read_len {
+        let gap_len = self.gap.len();
+        let spare_len = self.buf.capacity() - self.buf.len();
+        let buf = if gap_len > read_len {
+            &mut self.buf[self.gap.start..self.gap.start + read_len]
+        } else if spare_len > read_len {
             unsafe {
                 core::slice::from_raw_parts_mut(
-                    gapstr.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
+                    self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
                     read_len,
                 )
             }
         } else {
-            gapstr.buf.reserve(read_len);
+            self.buf.reserve(read_len);
 
             unsafe {
                 core::slice::from_raw_parts_mut(
-                    gapstr.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
+                    self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
                     read_len,
                 )
             }
@@ -352,7 +308,7 @@ impl GapText {
 
         let buf_ptr = buf.as_mut_ptr();
 
-        let GapSlice::Spaced(s1, s2) = gapstr.get(r)? else {
+        let GapSlice::Spaced(s1, s2) = self.get(r)? else {
             unreachable!()
         };
 
@@ -366,6 +322,60 @@ impl GapText {
                 buf_ptr, read_len,
             )))
         }
+    }
+
+    #[inline(always)]
+    fn get_raw<RB: RangeBounds<usize>>(
+        buf: &[u8],
+        gap: Range<usize>,
+        r: RB,
+    ) -> Option<GapSlice<'_>> {
+        let s_len = buf.len() - gap.len();
+
+        let Range { start, end } = get_range(s_len, r);
+
+        // check the range values
+        if start > end || s_len < end {
+            return None;
+        }
+
+        let start_with_offset = Self::byte_pos_with_offset(gap.clone(), start);
+        let end_with_offset = Self::byte_pos_with_offset(gap.clone(), end);
+
+        debug_assert!(start_with_offset <= end_with_offset);
+
+        // perform char boundry check
+        if !is_get_char_boundry(buf, buf[start_with_offset], end_with_offset) {
+            return None;
+        }
+
+        // handles all of the single piece conditions
+        // Range before gap case, Range after gap case, and start in gap case
+        //
+        // after this check
+        // - start_with_offset == start
+        // - start < self.gap.start
+        // - self.gap.start < end
+        if is_get_single(gap.start, start, end) {
+            return Some(GapSlice::Single(unsafe {
+                str::from_utf8_unchecked(&buf[start_with_offset..end_with_offset])
+            }));
+        }
+
+        debug_assert_eq!(start_with_offset, start);
+        debug_assert_ne!(end, end_with_offset);
+
+        unsafe {
+            let first = str::from_utf8_unchecked(&buf[start_with_offset..gap.start]);
+            let second = str::from_utf8_unchecked(&buf[gap.end..end_with_offset]);
+
+            Some(GapSlice::Spaced(first, second))
+        }
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.buf.len() - self.gap.len()
     }
 }
 
@@ -385,7 +395,7 @@ fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Range<usize> {
     start..end
 }
 
-#[inline]
+#[inline(always)]
 fn is_get_single(gap_start: usize, start: usize, end: usize) -> bool {
     end <= gap_start || gap_start <= start
 }
