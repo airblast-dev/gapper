@@ -2,7 +2,9 @@ mod slice;
 mod utils;
 
 use core::str;
-use std::ops::{Bound, Range, RangeBounds};
+use std::{
+    borrow::Cow, fmt::Display, ops::{Bound, Range, RangeBounds}
+};
 
 use slice::GapSlice;
 use utils::u8_is_char_boundry;
@@ -22,21 +24,42 @@ struct GapText {
     base_gap_size: usize,
 }
 
-impl GapText {
-    fn new(s: String) -> Self {
+impl Default for GapText {
+    fn default() -> Self {
         Self {
-            buf: s.into_bytes(),
+            buf: vec![],
             gap: 0..0,
             base_gap_size: DEFAULT_GAP_SIZE,
         }
     }
+}
 
-    fn with_gap_size(s: String, size: usize) -> Self {
+impl Display for GapText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.get(..).unwrap())
+    }
+}
+
+impl GapText {
+    fn new<'a, S>(s: S) -> Self
+    where
+        S: Into<Cow<'a, str>>,
+    {
+        let s: Cow<'_, str> = s.into();
+        let s = match s {
+            Cow::Owned(s) => s,
+            Cow::Borrowed(s) => s.to_string(),
+        };
         Self {
             buf: s.into_bytes(),
-            gap: 0..0,
-            base_gap_size: size,
+            ..Default::default()
         }
+    }
+
+    fn with_gap_size<'a, S>(s: S, size: usize) -> Self where S: Into<Cow<'a, str>> {
+        let mut gapstr = Self::new(s);
+        gapstr.set_base_gap_size(size);
+        gapstr
     }
 
     fn base_gap_size(&self) -> usize {
@@ -109,10 +132,11 @@ impl GapText {
             self.buf
                 .extend_from_slice(&s.as_bytes()[self.gap.end - start..]);
             self.buf.extend_from_slice(&[0; DEFAULT_GAP_SIZE]);
+            let base_gap_size = self.base_gap_size();
             self.buf
-                .rotate_right(s.len() - (self.gap.end - start) + DEFAULT_GAP_SIZE);
+                .rotate_right(s.len() - (self.gap.end - start) + base_gap_size);
             self.gap.start = start + s.len();
-            self.gap.end = self.gap.start + DEFAULT_GAP_SIZE;
+            self.gap.end = self.gap.start + base_gap_size;
         }
 
         Ok(())
