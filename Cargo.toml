@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 memchr = { version = "2.7.4" }
+polonius-the-crab = "0.4.2"
 
 [dev-dependencies]
 rstest = "0.24.0"

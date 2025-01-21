@@ -3,10 +3,11 @@ mod utils;
 
 use core::str;
 use std::{
-    ops::{Bound, Index, Range, RangeBounds},
-    slice::SliceIndex,
+    mem::MaybeUninit,
+    ops::{Bound, Range, RangeBounds},
 };
 
+use polonius_the_crab::{exit_polonius, polonius, polonius_return, polonius_try};
 use slice::GapSlice;
 use utils::u8_is_char_boundry;
 
@@ -23,14 +24,12 @@ struct GapText {
     buf: Vec<u8>,
     gap: Range<usize>,
     base_gap_size: usize,
-    read_buf: String,
 }
 
 impl GapText {
     fn new(s: String) -> Self {
         Self {
             buf: s.into_bytes(),
-            read_buf: String::new(),
             gap: 0..0,
             base_gap_size: DEFAULT_GAP_SIZE,
         }
@@ -39,7 +38,6 @@ impl GapText {
     fn with_gap_size(s: String, size: usize) -> Self {
         Self {
             buf: s.into_bytes(),
-            read_buf: String::new(),
             gap: 0..0,
             base_gap_size: size,
         }
@@ -232,6 +230,9 @@ impl GapText {
                 copy_count,
             );
         }
+
+        debug_assert_ne!(right_shift == 0, left_shift == 0);
+
         self.shift_gap_right(right_shift);
         self.shift_gap_left(left_shift);
 
@@ -259,78 +260,144 @@ impl GapText {
         self.gap.end = at + self.base_gap_size;
     }
 
+    #[inline(always)]
     fn byte_pos_with_offset(&self, byte_pos: usize) -> usize {
         if self.gap.start > byte_pos {
             byte_pos
-        } else if self.gap.contains(&byte_pos) {
-            byte_pos - self.gap.start + self.gap.end
         } else {
             self.gap.len() + byte_pos
         }
     }
 
-    fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
-        // 4 cases to handle
-        // - gap range contains range
-        // - gap start is in range
-        // - gap end is in range
-        // - gap range is before range
-        // - gap range is after range
-        let start = match r.start_bound() {
-            Bound::Unbounded => 0,
-            Bound::Excluded(i) => i.saturating_sub(1),
-            Bound::Included(i) => *i,
-        };
-        let end = match r.end_bound() {
-            Bound::Unbounded => self.buf.len() - self.gap.len(),
-            Bound::Excluded(i) => i.saturating_sub(1).min(start),
-            Bound::Included(i) => *i,
-        };
+    #[inline(always)]
+    pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
+        let s_len = self.buf.len() - self.gap.len();
 
-        assert!(start <= end);
-        if end < self.gap.start {
-            if !u8_is_char_boundry(self.buf[start]) && !u8_is_char_boundry(self.buf[end]) {
-                return None;
-            } else {
-                return Some(GapSlice::Single(unsafe {
-                    str::from_utf8_unchecked(&self.buf[start..=end])
-                }));
-            }
+        let Range { start, end } = get_range(s_len, r);
+
+        // check the range values
+        if start > end || s_len < end {
+            return None;
         }
 
-        if self.gap.end <= start {
-            if !u8_is_char_boundry(self.buf[start]) {
-                return None;
-            } else {
-                return Some(GapSlice::Single(unsafe {
-                    str::from_utf8_unchecked(
-                        &self.buf[start + self.gap.len()..=end + self.gap.len()],
-                    )
-                }));
-            }
+        let start_with_offset = self.byte_pos_with_offset(start);
+        let end_with_offset = self.byte_pos_with_offset(end);
+
+        debug_assert!(start_with_offset <= end_with_offset);
+
+        // perform char boundry check
+        if !is_get_char_boundry(&self.buf, self.buf[start_with_offset], end_with_offset) {
+            return None;
         }
 
-        if start <= self.gap.start && end < self.gap.end {
-            let first_start = self.gap.start - (self.gap.start - start);
-            let second_end = self.gap.end + (self.gap.end - end);
-            unsafe {
-                let first = str::from_utf8_unchecked(&self.buf[first_start..self.gap.start]);
-                let second = str::from_utf8_unchecked(&self.buf[self.gap.end..=second_end]);
-                return Some(GapSlice::Spaced(first, second));
-            }
+        // handles all of the single piece conditions
+        // Range before gap case, Range after gap case, and start in gap case
+        //
+        // after this check
+        // - start_with_offset == start
+        // - start < self.gap.start
+        // - self.gap.start < end
+        if is_get_single(self.gap.start, start, end) {
+            return Some(GapSlice::Single(unsafe {
+                str::from_utf8_unchecked(&self.buf[start_with_offset..end_with_offset])
+            }));
         }
 
-        if self.gap.start < start && end <= self.gap.end {
-            let second_end = self.gap.end + (self.gap.end - end);
-            unsafe {
-                let first = str::from_utf8_unchecked(&self.buf[start..self.gap.start]);
-                let second = str::from_utf8_unchecked(&self.buf[self.gap.end..=second_end]);
-                return Some(GapSlice::Spaced(first, second));
-            }
-        }
+        debug_assert_eq!(start_with_offset, start);
+        debug_assert_ne!(end, end_with_offset);
 
-        None
+        unsafe {
+            let first = str::from_utf8_unchecked(&self.buf[start_with_offset..self.gap.start]);
+            let second = str::from_utf8_unchecked(&self.buf[self.gap.end..end_with_offset]);
+
+            Some(GapSlice::Spaced(first, second))
+        }
     }
+
+    #[inline]
+    pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
+        let r = get_range(self.buf.len() - self.gap.len(), r);
+        let read_len = r.len();
+
+        let mut gapstr = self;
+        // TODO: maybe remove usage of polonius and use unsafe instead?
+        polonius! {
+            |gapstr| -> Option<&'polonius str> {
+                if let GapSlice::Single(s) = polonius_try!(gapstr.get(r.start..r.end)) {
+                    polonius_return!(Some(s));
+                }
+                exit_polonius!()
+            }
+        }
+
+        let buf = if gapstr.gap.len() > read_len {
+            &mut gapstr.buf[gapstr.gap.start..gapstr.gap.start + read_len]
+        } else if gapstr.buf.capacity() - gapstr.buf.len() > read_len {
+            unsafe {
+                core::slice::from_raw_parts_mut(
+                    gapstr.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
+                    read_len,
+                )
+            }
+        } else {
+            gapstr.buf.reserve(read_len);
+
+            unsafe {
+                core::slice::from_raw_parts_mut(
+                    gapstr.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
+                    read_len,
+                )
+            }
+        };
+
+        let buf_ptr = buf.as_mut_ptr();
+
+        let GapSlice::Spaced(s1, s2) = gapstr.get(r)? else {
+            unreachable!()
+        };
+
+        unsafe {
+            buf_ptr.copy_from_nonoverlapping(s1.as_ptr(), s1.len());
+            buf_ptr
+                .add(s1.len())
+                .copy_from_nonoverlapping(s2.as_ptr(), s2.len());
+
+            Some(str::from_utf8_unchecked(core::slice::from_raw_parts(
+                buf_ptr, read_len,
+            )))
+        }
+    }
+}
+
+#[inline]
+fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Range<usize> {
+    let start = match r.start_bound() {
+        Bound::Unbounded => 0,
+        Bound::Excluded(i) => i.saturating_add(1),
+        Bound::Included(i) => *i,
+    };
+    let end = match r.end_bound() {
+        Bound::Unbounded => max,
+        Bound::Excluded(i) => *i,
+        Bound::Included(i) => i.saturating_add(1),
+    };
+
+    start..end
+}
+
+#[inline]
+fn is_get_single(gap_start: usize, start: usize, end: usize) -> bool {
+    end <= gap_start || gap_start <= start
+}
+
+#[inline]
+fn is_get_char_boundry(buf: &[u8], b1: u8, end_index: usize) -> bool {
+    u8_is_char_boundry(b1)
+            // NOTE: Option::is_none_or is more elegant but requires higher MSRV
+            && buf
+                .get(end_index)
+                .filter(|b| !u8_is_char_boundry(**b))
+                .is_none()
 }
 
 #[cfg(test)]
