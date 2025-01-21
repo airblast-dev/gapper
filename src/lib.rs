@@ -436,8 +436,6 @@ mod tests {
         String::from_utf8((1..128).collect()).unwrap().repeat(10)
     }
 
-    // TODO: split this into multiple cases or their own functions.
-    // This takes wayyy to long to run with miri (less of a problem without miri but still slow).
     #[rstest]
     fn move_gap_start(large_str: &str) -> Result<(), GapError> {
         let sample = large_str;
