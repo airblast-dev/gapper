@@ -466,14 +466,22 @@ impl GapText {
 
     #[inline(always)]
     pub fn spare_capacity_mut(&mut self) -> (&mut [u8], &mut [MaybeUninit<u8>]) {
-        let gap_len = self.gap.len();
-        let gap_ptr = &raw mut self.buf[self.gap.start];
-        let vec_spare = self.buf.spare_capacity_mut();
+        let buf_len = self.buf.len();
+        let spare_size = self.buf.capacity() - self.buf.len();
+        let vec_ptr = self.buf.as_mut_ptr();
+        // The things we do to make miri happy :))
+        let (gap_buf, _) = unsafe { self.buf.split_at_mut_unchecked(self.gap.end) };
+        let vec_spare = unsafe {
+            core::slice::from_raw_parts_mut(
+                vec_ptr.add(buf_len).cast::<MaybeUninit<u8>>(),
+                spare_size,
+            )
+        };
 
         // SAFETY: the gap and spare capacity are never overlapping, we do this since getting the
         // spare capacity takes a mutable reference to the whole [`Vec`] meaning we can't do a
         // split_at_mut to get the spare capacity
-        unsafe { (core::slice::from_raw_parts_mut(gap_ptr, gap_len), vec_spare) }
+        (&mut gap_buf[self.gap.start..], vec_spare)
     }
 }
 
@@ -668,5 +676,37 @@ mod tests {
         assert_eq!(s, "anges");
         let s = t.get(..).unwrap();
         assert_eq!(s, "HeApplesOrangesllo, World");
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::small_gap(1)]
+    #[case::small_gap(2)]
+    #[case::small_gap(3)]
+    #[case::medium_gap(128)]
+    #[case::large(512)]
+    fn get_str(#[case] gap_size: usize) {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
+        t.insert_gap(2);
+
+        let s = t.get_str(0..4).unwrap();
+        assert_eq!(s, "Hell");
+        let s = t.get_str(0..2).unwrap();
+        assert_eq!(s, "He");
+        let s = t.get_str(2..5).unwrap();
+        assert_eq!(s, "llo");
+        let s = t.get_str(3..9).unwrap();
+        assert_eq!(s, "lo, Wo");
+        let s = t.get_str(9..).unwrap();
+        assert_eq!(s, "rld");
+        let s = t.get_str(..).unwrap();
+        assert_eq!(s, "Hello, World");
+        let s = t.get_str(..12).unwrap();
+        assert_eq!(s, "Hello, World");
+        assert!(t.get_str(..15).is_none());
+        assert!(t.get_str(25..).is_none());
+        assert!(t.get_str(0..13).is_none());
+        assert!(t.get_str(3..14).is_none());
     }
 }
