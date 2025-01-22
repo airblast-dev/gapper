@@ -369,6 +369,9 @@ impl GapText {
     /// use less memory if you do not need an owned string.
     #[inline]
     pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
+        // TODO: there are some common cases where the output of `GapText::get` is `GapSlice::Spaced`
+        // but do not require the pre and post bytes to be copied. this func can probably optimized
+        // further
         let r = get_range(self.buf.len() - self.gap.len(), r);
         let read_len = r.len();
 
@@ -470,7 +473,7 @@ impl GapText {
         let spare_size = self.buf.capacity() - self.buf.len();
         let vec_ptr = self.buf.as_mut_ptr();
 
-        // In order to tell miri that the slices don't overlap we have to do a bit of magic
+        // SAFETY: In order to tell miri that the slices don't overlap we have to do a bit of magic
         // The things we do to make miri happy :))
         let (gap_buf, _) = unsafe { self.buf.split_at_mut_unchecked(self.gap.end) };
         let vec_spare = unsafe {
@@ -480,9 +483,6 @@ impl GapText {
             )
         };
 
-        // SAFETY: the gap and spare capacity are never overlapping, we do this since getting the
-        // spare capacity takes a mutable reference to the whole [`Vec`] meaning we can't do a
-        // split_at_mut to get the spare capacity
         (&mut gap_buf[self.gap.start..], vec_spare)
     }
 }
