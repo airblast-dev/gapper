@@ -211,10 +211,10 @@ impl GapText {
                     // range will be set to
                     if self.gap.start > to {
                         self.buf[to..self.gap.end].rotate_right(self.gap.len());
-                        self.shift_gap_left(self.gap.start - to);
+                        unsafe { self.shift_gap_left(self.gap.start - to) };
                     } else {
                         self.buf[self.gap.start..to + self.gap.len()].rotate_left(self.gap.len());
-                        self.shift_gap_right(to - self.gap.start);
+                        unsafe { self.shift_gap_right(to - self.gap.start) };
                     }
 
                     return Ok(());
@@ -258,21 +258,38 @@ impl GapText {
         }
 
         debug_assert_ne!(right_shift == 0, left_shift == 0);
-
-        self.shift_gap_right(right_shift);
-        self.shift_gap_left(left_shift);
+        unsafe {
+            self.shift_gap_right(right_shift);
+            self.shift_gap_left(left_shift);
+        }
 
         Ok(())
     }
 
+    /// Shifts the gap right by N
+    ///
+    /// # Safety
+    ///
+    /// If the values exposed on the left side end up creating a non UTF-8 this can cause UB or
+    /// panics in some code paths.
+    ///
+    /// Generally before calling this function the bytes on the right should be copied to the left.
     #[inline(always)]
-    fn shift_gap_right(&mut self, by: usize) {
+    unsafe fn shift_gap_right(&mut self, by: usize) {
         self.gap.start += by;
         self.gap.end += by;
     }
 
+    /// Shifts the gap left by N
+    ///
+    /// # Safety
+    ///
+    /// If the values exposed on the right side end up creating a non UTF-8 this can cause UB or
+    /// panics in some code paths.
+    ///
+    /// Generally before calling this function the bytes on the left should be copied to the right.
     #[inline(always)]
-    fn shift_gap_left(&mut self, by: usize) {
+    unsafe fn shift_gap_left(&mut self, by: usize) {
         self.gap.start -= by;
         self.gap.end -= by;
     }
@@ -467,6 +484,7 @@ impl GapText {
         self.buf.len() - self.gap.len()
     }
 
+    /// Returns the gap slice and uninitialized slice of the internal [`Vec`]
     #[inline(always)]
     pub fn spare_capacity_mut(&mut self) -> (&mut [u8], &mut [MaybeUninit<u8>]) {
         let buf_len = self.buf.len();
