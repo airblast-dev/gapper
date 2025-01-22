@@ -3,7 +3,9 @@ mod utils;
 
 use core::str;
 use std::{
-    borrow::Cow, fmt::Display, ops::{Bound, Range, RangeBounds}
+    borrow::Cow,
+    fmt::Display,
+    ops::{Bound, Range, RangeBounds},
 };
 
 use slice::GapSlice;
@@ -56,7 +58,10 @@ impl GapText {
         }
     }
 
-    fn with_gap_size<'a, S>(s: S, size: usize) -> Self where S: Into<Cow<'a, str>> {
+    fn with_gap_size<'a, S>(s: S, size: usize) -> Self
+    where
+        S: Into<Cow<'a, str>>,
+    {
         let mut gapstr = Self::new(s);
         gapstr.set_base_gap_size(size);
         gapstr
@@ -303,6 +308,47 @@ impl GapText {
         Self::get_raw(&self.buf, self.gap.clone(), r)
     }
 
+    /// Get a string slice from the [`GapText`]
+    ///
+    /// Calling [`GapText::get`] should always be preferred where possible.
+    /// It is only recommended you call this function if all of the following are true:
+    /// - You strictly need a single string slice
+    /// - The requested slice is expected to be small relative to the whole text
+    ///
+    /// As an alternative, if you already have a [`String`] with some capacity that is already used
+    /// as a scratch buffer, you may prefer [`GapText::get`] in combination with [`GapSlice`]'s
+    /// [`Display`] implementation to store it in the existing strings buffer. Doing so may avoid
+    /// reallocating the internal buffer in some cases, resulting in better performance.
+    ///
+    /// # Guarantees
+    ///
+    /// This method guarantees that the gap's location will not be moved inside the buffer, thus calling this method
+    /// will not degrade performance of any further edits to the [`GapText`].
+    ///
+    ///
+    /// # Note
+    ///
+    /// The paragraphs below are related to performance characteristics, and contain some
+    /// information related to the implementation details. Feel free to ignore them unless you are
+    /// using unsafe methods.
+    ///
+    /// This method attempts reuse the existing space on the buffer to construct a valid string
+    /// slice. This does not mutate the string itself, but rather the extra space surrounding any
+    /// stored string. This includes the gap, or the spare capacity of the [`Vec<u8>`] internally.
+    ///
+    /// This method handles two cases with very different performance characteristics. If the gap
+    /// does not lie on the requested range, it simply returns the string slice since no further
+    /// operation is needed.
+    ///
+    /// However if the gap does lie on the requested range, in order to return a string slice
+    /// the gap or spare capacity is used as a scratch buffer to construct the string slice.
+    /// This is great where the requested range fits in the gap or space capacity but otherwise we
+    /// end up reallocating the buffer which can have large performance costs with large strings.
+    ///
+    /// As a result you are discouraged to call this method unless you strictly need a single
+    /// string slice returned. If you are calling [`GapText::get`] and [`GapSlice::to_string`]
+    /// right after, this method should be preferred as this will almost always be faster and
+    /// use less memory if you do not need an owned string.
     #[inline]
     pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
         let r = get_range(self.buf.len() - self.gap.len(), r);
