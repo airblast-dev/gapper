@@ -148,6 +148,7 @@ impl GapText {
         Ok(())
     }
 
+    /// Move the gap start to the provided position
     pub fn move_gap_start_to(&mut self, to: usize) -> Result<(), GapError> {
         if self.gap.start == to {
             return Ok(());
@@ -355,76 +356,86 @@ impl GapText {
     /// [`Display`] implementation to store it in the existing strings buffer. Doing so may avoid
     /// reallocating the internal buffer in some cases, resulting in better performance.
     ///
-    /// # Guarantees
+    /// # Performance
     ///
-    /// This method guarantees that the gap's location will not be moved inside the buffer, thus calling this method
-    /// will not degrade performance of any further edits to the [`GapText`].
+    /// The method attempts to construct a string slice by doing the minimal copies necessary
+    /// whilst not moving the gap to optimize for future edits. The gap is not guaranteed to change
+    /// positions, but the method will do its best to avoid doing so.
     ///
-    ///
-    /// # Note
-    ///
-    /// The paragraphs below are related to performance characteristics, and contain some
-    /// information related to the implementation details. Feel free to ignore them unless you are
-    /// using unsafe methods.
-    ///
-    /// This method attempts reuse the existing space on the buffer to construct a valid string
-    /// slice. This does not mutate the string itself, but rather the extra space surrounding any
-    /// stored string. This includes the gap, or the spare capacity of the [`Vec<u8>`] internally.
-    ///
-    /// This method handles two cases with very different performance characteristics. If the gap
-    /// does not lie on the requested range, it simply returns the string slice since no further
-    /// operation is needed.
-    ///
-    /// However if the gap does lie on the requested range, in order to return a string slice
-    /// the gap or spare capacity is used as a scratch buffer to construct the string slice.
-    /// This is great where the requested range fits in the gap or space capacity but otherwise we
-    /// end up reallocating the buffer which can have large performance costs with large strings.
-    ///
-    /// As a result you are discouraged to call this method unless you strictly need a single
-    /// string slice returned. If you are calling [`GapText::get`] and [`GapSlice::to_string`]
-    /// right after, this method should be preferred as this will almost always be faster and
-    /// use less memory if you do not need an owned string.
+    /// Best case the range does not lie on a gap, the read is O(1).
+    /// Best case where the range lies on a gap and the spare capacity is enough, the read is a O(N)
+    /// where N is the is the smallest side of the read.
+    /// TODO: Worst case the requested range does not fit in any excess space, the read is O(N) where N
+    /// is the smallest side of the read.
     #[inline]
     pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
-        // TODO: there are some common cases where the output of `GapText::get` is `GapSlice::Spaced`
-        // but do not require the pre and post bytes to be copied. this func can probably optimized
-        // further
         let r = get_range(self.buf.len() - self.gap.len(), r);
         let read_len = r.len();
+        let gap_len = self.gap.len();
 
-        let buf = self.buf.as_ptr();
-        if let GapSlice::Single(s) = Self::get_raw(
-            unsafe { core::slice::from_raw_parts(buf, self.buf.len()) },
+        let start;
+        let (src, dst, len) = match Self::get_raw(
+            unsafe { core::slice::from_raw_parts(self.buf.as_ptr(), self.buf.len()) },
             self.gap.clone(),
             r.clone(),
         )? {
-            return Some(s);
-        }
+            GapSlice::Single(s) => return Some(s),
+            GapSlice::Spaced(s1, s2) if s1.len().min(s2.len()) <= gap_len => {
+                let buf_ptr = self.buf.as_mut_ptr();
+                if s1.len() <= s2.len() {
+                    start = self.gap.end - s1.len();
+                    (
+                        s1.as_ptr(),
+                        unsafe { buf_ptr.add(self.gap.end - s1.len()) },
+                        s1.len(),
+                    )
+                } else {
+                    start = self.gap.start;
+                    (
+                        s2.as_ptr(),
+                        unsafe { buf_ptr.add(self.gap.start) },
+                        s2.len(),
+                    )
+                }
+            }
+            _ => {
+                let start_offset = Self::start_byte_pos_with_offset(self.gap.clone(), r.start);
+                let end_offset = Self::start_byte_pos_with_offset(self.gap.clone(), r.end);
+                let (gap_buf, spare_buf) = self.spare_capacity_mut();
+                let buf_ptr = if gap_buf.len() >= read_len {
+                    gap_buf.as_mut_ptr()
+                } else if spare_buf.len() >= read_len {
+                    spare_buf.as_mut_ptr() as *mut u8
+                } else {
+                    self.buf.reserve_exact(read_len);
 
-        let (gap_buf, spare_buf) = self.spare_capacity_mut();
-        let buf_ptr = if gap_buf.len() >= read_len {
-            gap_buf.as_mut_ptr()
-        } else if spare_buf.len() >= read_len {
-            spare_buf.as_mut_ptr() as *mut u8
-        } else {
-            self.buf.reserve_exact(read_len);
-            self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
+                    self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
+                };
+
+                let s1_ptr = unsafe { self.buf.as_ptr().add(start_offset) };
+                let s1_len = self.gap.start - start_offset;
+                let s2_ptr = unsafe { self.buf.as_ptr().add(self.gap.end) };
+                let s2_len = end_offset - self.gap.end;
+
+                // casting to a usize is safe as both pointers are in a [`Vec`] and a [`Vec`] can
+                // store at most [`isize::MAX`] bytes, and buf_ptr is guaranteed to be equal or
+                // same to the buffers start
+                start = unsafe { buf_ptr.offset_from(self.buf.as_ptr()) } as usize;
+
+                unsafe {
+                    core::ptr::copy_nonoverlapping(s1_ptr, buf_ptr, s1_len);
+                    (s2_ptr, buf_ptr.add(s1_len), s2_len)
+                }
+            }
         };
 
-        let GapSlice::Spaced(s1, s2) = self.get(r)? else {
-            unreachable!()
-        };
-
-        unsafe {
-            buf_ptr.copy_from_nonoverlapping(s1.as_ptr(), s1.len());
-            buf_ptr
-                .add(s1.len())
-                .copy_from_nonoverlapping(s2.as_ptr(), s2.len());
-
-            Some(str::from_utf8_unchecked(core::slice::from_raw_parts(
-                buf_ptr, read_len,
-            )))
-        }
+        unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
+        Some(unsafe {
+            str::from_utf8_unchecked(core::slice::from_raw_parts(
+                self.buf.as_ptr().add(start),
+                r.len(),
+            ))
+        })
     }
 
     #[inline(always)]
