@@ -5,6 +5,7 @@ use core::str;
 use std::{
     borrow::Cow,
     fmt::Display,
+    mem::MaybeUninit,
     ops::{Bound, Range, RangeBounds},
 };
 
@@ -380,12 +381,11 @@ impl GapText {
             return Some(s);
         }
 
-        let gap_len = self.gap.len();
-        let spare_len = self.buf.capacity() - self.buf.len();
-        let buf_ptr = if gap_len > read_len {
-            &raw mut self.buf[self.gap.start]
-        } else if spare_len > read_len {
-            self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
+        let (gap_buf, spare_buf) = self.spare_capacity_mut();
+        let buf_ptr = if gap_buf.len() >= read_len {
+            gap_buf.as_mut_ptr()
+        } else if spare_buf.len() >= read_len {
+            spare_buf.as_mut_ptr() as *mut u8
         } else {
             self.buf.reserve_exact(read_len);
             self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
@@ -465,14 +465,15 @@ impl GapText {
     }
 
     #[inline(always)]
-    pub fn scratch_buf(&mut self) -> &mut [u8] {
+    pub fn spare_capacity_mut(&mut self) -> (&mut [u8], &mut [MaybeUninit<u8>]) {
         let gap_len = self.gap.len();
-        let spare_len = self.buf.capacity() - self.buf.len();
-        if spare_len < gap_len {
-            return &mut self.buf[self.gap.start..self.gap.end];
-        } else {
-            return &mut self.buf.spare;
-        }
+        let gap_ptr = &raw mut self.buf[self.gap.start];
+        let vec_spare = self.buf.spare_capacity_mut();
+
+        // SAFETY: the gap and spare capacity are never overlapping, we do this since getting the
+        // spare capacity takes a mutable reference to the whole [`Vec`] meaning we can't do a
+        // split_at_mut to get the spare capacity
+        unsafe { (core::slice::from_raw_parts_mut(gap_ptr, gap_len), vec_spare) }
     }
 }
 
