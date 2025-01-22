@@ -329,7 +329,7 @@ impl GapText {
                 )
             }
         } else {
-            self.buf.reserve(read_len);
+            self.buf.reserve_exact(read_len);
 
             unsafe {
                 core::slice::from_raw_parts_mut(
