@@ -276,6 +276,11 @@ impl GapText {
         self.gap.end -= by;
     }
 
+    /// Insert a gap at a specific position
+    ///
+    /// # Panics
+    ///
+    /// If a gap with a length larger than 0 already exists this will cause a panic.
     fn insert_gap(&mut self, at: usize) {
         assert_eq!(self.gap.start, self.gap.end);
         self.buf
@@ -285,6 +290,7 @@ impl GapText {
         self.gap.end = at + self.base_gap_size;
     }
 
+    /// Returns the byte position for a start byte, adding the offset if needed.
     #[inline(always)]
     fn start_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
         if gap.start > byte_pos {
@@ -294,6 +300,7 @@ impl GapText {
         }
     }
 
+    /// Returns the byte position for a end byte, adding the offset if needed.
     #[inline(always)]
     fn end_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
         if gap.start >= byte_pos {
@@ -303,12 +310,22 @@ impl GapText {
         }
     }
 
+    /// Get a string slice from the [`GapText`]
+    ///
+    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
+    ///
+    /// The provided range may conflict with the gap, in that case a [`GapSlice::Spaced`] variant
+    /// is returned containing the requested range with the gap being skipped.
+    ///
+    /// If a single string slice is strictly required see [`GapText::get_str`].
     #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
         Self::get_raw(&self.buf, self.gap.clone(), r)
     }
 
     /// Get a string slice from the [`GapText`]
+    ///
+    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
     ///
     /// Calling [`GapText::get`] should always be preferred where possible.
     /// It is only recommended you call this function if all of the following are true:
