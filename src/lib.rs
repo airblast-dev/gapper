@@ -469,6 +469,8 @@ impl GapText {
         let buf_len = self.buf.len();
         let spare_size = self.buf.capacity() - self.buf.len();
         let vec_ptr = self.buf.as_mut_ptr();
+
+        // In order to tell miri that the slices don't overlap we have to do a bit of magic
         // The things we do to make miri happy :))
         let (gap_buf, _) = unsafe { self.buf.split_at_mut_unchecked(self.gap.end) };
         let vec_spare = unsafe {
