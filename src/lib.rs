@@ -382,27 +382,14 @@ impl GapText {
 
         let gap_len = self.gap.len();
         let spare_len = self.buf.capacity() - self.buf.len();
-        let buf = if gap_len > read_len {
-            &mut self.buf[self.gap.start..self.gap.start + read_len]
+        let buf_ptr = if gap_len > read_len {
+            &raw mut self.buf[self.gap.start]
         } else if spare_len > read_len {
-            unsafe {
-                core::slice::from_raw_parts_mut(
-                    self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
-                    read_len,
-                )
-            }
+            self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
         } else {
             self.buf.reserve_exact(read_len);
-
-            unsafe {
-                core::slice::from_raw_parts_mut(
-                    self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8,
-                    read_len,
-                )
-            }
+            self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
         };
-
-        let buf_ptr = buf.as_mut_ptr();
 
         let GapSlice::Spaced(s1, s2) = self.get(r)? else {
             unreachable!()
@@ -475,6 +462,17 @@ impl GapText {
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.buf.len() - self.gap.len()
+    }
+
+    #[inline(always)]
+    pub fn scratch_buf(&mut self) -> &mut [u8] {
+        let gap_len = self.gap.len();
+        let spare_len = self.buf.capacity() - self.buf.len();
+        if spare_len < gap_len {
+            return &mut self.buf[self.gap.start..self.gap.end];
+        } else {
+            return &mut self.buf.spare;
+        }
     }
 }
 
