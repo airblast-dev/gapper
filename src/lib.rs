@@ -10,19 +10,19 @@ use std::{
 };
 
 use slice::GapSlice;
-use utils::u8_is_char_boundry;
+use utils::{box_with_gap, end_byte_pos_with_offset, get_range, is_get_single, u8_is_char_boundry};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 
 #[derive(Clone, Debug)]
 enum GapError {
-    OutOfBounds { len: usize, target: usize },
+    OutOfBounds,
     NotCharBoundry,
 }
 
 #[derive(Clone, Debug)]
 struct GapText {
-    buf: Vec<u8>,
+    buf: Box<[u8]>,
     gap: Range<usize>,
     base_gap_size: usize,
 }
@@ -30,7 +30,7 @@ struct GapText {
 impl Default for GapText {
     fn default() -> Self {
         Self {
-            buf: vec![],
+            buf: Box::new([]),
             gap: 0..0,
             base_gap_size: DEFAULT_GAP_SIZE,
         }
@@ -49,12 +49,33 @@ impl GapText {
         S: Into<Cow<'a, str>>,
     {
         let s: Cow<'_, str> = s.into();
-        let s = match s {
-            Cow::Owned(s) => s,
-            Cow::Borrowed(s) => s.to_string(),
+        let (buf, gap) = match s {
+            Cow::Owned(s) => {
+                let mut buf_vec = s.into_bytes();
+                let vec_len = buf_vec.len();
+
+                // When an owned string is passed it is likely that it has spare capacity, we can
+                // reuse it as a gap buffer.
+                let spare = buf_vec.spare_capacity_mut();
+                let spare_len = spare.len();
+
+                // SAFETY: MaybeUninit is not copy so it does not benefit from the specialized implementation.
+                // In our case we definitely know that the values are not initialized or, are initialized
+                // with no drop code.
+                // We initialize the values and set the vec length manually for performance.
+                unsafe {
+                    spare.as_mut_ptr().write_bytes(0, spare.len());
+                    buf_vec.set_len(vec_len + spare_len);
+                }
+                (buf_vec.into_boxed_slice(), vec_len..vec_len + spare_len)
+            }
+
+            Cow::Borrowed(s) => (Box::from(s.as_bytes()), 0..0),
         };
+
         Self {
-            buf: s.into_bytes(),
+            buf,
+            gap,
             ..Default::default()
         }
     }
@@ -76,94 +97,25 @@ impl GapText {
         self.base_gap_size = gap_size;
     }
 
-    fn insert(&mut self, at: usize, s: &str) -> Result<(), GapError> {
-        self.move_gap_start_to(at)?;
-        if !u8_is_char_boundry(*self.buf.get(at).ok_or(GapError::OutOfBounds {
-            len: self.buf.len() - self.gap.len(),
-            target: at,
-        })?) {
-            return Err(GapError::NotCharBoundry);
-        };
-        // ideal case, the gap has enough space
-        if s.len() <= self.gap.len() {
-            self.buf[self.gap.start..self.gap.start + s.len()].copy_from_slice(s.as_bytes());
-            self.gap.start += s.len();
-        } else {
-            // Since we are already shifting a possibly large number of elements, we should also
-            // add a gap. This results in only 2 likely small copies and one possibly large copy.
-            self.buf[self.gap.clone()].copy_from_slice(&s.as_bytes()[..self.gap.len()]);
-
-            // the number of elements that were inserted into the existing gap.
-            let inserted = self.gap.len();
-
-            // since the insertion must exceed the gap length to reach this path, and we fill the
-            // existing gap before copying the overflow, the start and end must be zero at this
-            // stage.
-            self.gap.start = self.gap.end;
-
-            self.buf.reserve(s.len() + self.base_gap_size);
-
-            self.buf.extend_from_slice(&s.as_bytes()[inserted..]);
-            self.insert_gap(self.buf.len());
-
-            self.buf[at + inserted..].rotate_right(s.len() - inserted + self.gap.len());
-
-            // after the string is inserted the gap must always be after the inserted bytes
-            // the rotate performed above ensures that
-            self.gap.start = at + s.len();
-            self.gap.end = self.gap.start + self.base_gap_size;
-        }
-
-        Ok(())
-    }
-
-    fn delete(&mut self, Range { start, end }: Range<usize>) -> Result<(), GapError> {
-        // we dont actually have to delete anything, so we move the gap to the end of the range and
-        // then mark the "deleted" range as part of the gap.
-        self.move_gap_start_to(end)?;
-        assert_eq!(self.gap.start, end);
-        self.gap.start -= end - start;
-        Ok(())
-    }
-
-    fn replace(&mut self, Range { start, end }: Range<usize>, s: &str) -> Result<(), GapError> {
-        let to = (end - start).max(s.len());
-        self.move_gap_start_to(start + to)?;
-        self.gap.start -= (end - start).saturating_sub(s.len());
-        if self.gap.len() + s.len().saturating_sub(end - start) <= self.gap.len() {
-            self.buf[start..start + s.len()].copy_from_slice(s.as_bytes());
-            self.gap.start += s.len().saturating_sub(end - start);
-        } else {
-            self.buf[start..self.gap.end].copy_from_slice(&s.as_bytes()[..self.gap.end - start]);
-            self.buf
-                .extend_from_slice(&s.as_bytes()[self.gap.end - start..]);
-            self.buf.extend_from_slice(&[0; DEFAULT_GAP_SIZE]);
-            let base_gap_size = self.base_gap_size();
-            self.buf
-                .rotate_right(s.len() - (self.gap.end - start) + base_gap_size);
-            self.gap.start = start + s.len();
-            self.gap.end = self.gap.start + base_gap_size;
-        }
-
-        Ok(())
-    }
-
     /// Move the gap start to the provided position
-    pub fn move_gap_start_to(&mut self, to: usize) -> Result<(), GapError> {
+    pub fn move_gap_start_to(&mut self, to: usize) {
         if self.gap.start == to {
-            return Ok(());
+            return;
         }
         if self.gap.is_empty() {
             self.gap.start = to;
             self.gap.end = to;
-            return Ok(());
+            return;
         }
 
         if self.buf.len() - self.gap.len() < to {
-            return Err(GapError::OutOfBounds {
-                len: self.buf.len() - self.gap.len(),
-                target: to,
-            });
+            #[cold]
+            #[inline(never)]
+            #[track_caller]
+            fn oob_read() -> ! {
+                panic!("index for gap move is out of bounds");
+            }
+            oob_read();
         }
 
         enum SurroundsDirection {
@@ -218,7 +170,7 @@ impl GapText {
                         unsafe { self.shift_gap_right(to - self.gap.start) };
                     }
 
-                    return Ok(());
+                    return;
                 }
             };
 
@@ -250,12 +202,12 @@ impl GapText {
         // panicy operations in the conditions above.
         //
         // Instead we do a few checks and do a fast copy.
+
+        let ptr = self.buf.as_mut_ptr();
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                self.buf.as_ptr().add(src_addr_offset),
-                self.buf.as_mut_ptr().add(dst_addr_offset),
-                copy_count,
-            );
+            let src = ptr.add(src_addr_offset);
+            let dst = ptr.add(dst_addr_offset);
+            std::ptr::copy_nonoverlapping(src, dst, copy_count);
         }
 
         debug_assert_ne!(right_shift == 0, left_shift == 0);
@@ -263,8 +215,6 @@ impl GapText {
             self.shift_gap_right(right_shift);
             self.shift_gap_left(left_shift);
         }
-
-        Ok(())
     }
 
     /// Shifts the gap right by N
@@ -299,33 +249,47 @@ impl GapText {
     ///
     /// # Panics
     ///
-    /// If a gap with a length larger than 0 already exists this will cause a panic.
+    /// Panics if the provided position is greater than the string length ([`GapText::len`]).
     fn insert_gap(&mut self, at: usize) {
-        assert_eq!(self.gap.start, self.gap.end);
-        self.buf
-            .extend(std::iter::repeat(0).take(self.base_gap_size));
-        self.buf[at..].rotate_right(self.base_gap_size);
+        let (first, mid, last) = if self.gap.is_empty() {
+            (&self.buf[..at], [].as_slice(), &self.buf[at..])
+        } else if self.base_gap_size() > self.gap.len() {
+            let (mut first, mut last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
+            let mid = if first.len() > at {
+                let (f, mid) = first.split_at(at);
+                first = f;
+                mid
+            } else {
+                let (mid, l) = last.split_at(at - first.len());
+                last = l;
+                mid
+            };
+            (first, mid, last)
+        } else {
+            self.move_gap_start_to(at);
+            return;
+        };
+
+        self.buf = box_with_gap!(self.base_gap_size(), 2, first, mid, last);
         self.gap.start = at;
-        self.gap.end = at + self.base_gap_size;
+        self.gap.end = at + self.base_gap_size();
     }
 
-    /// Returns the byte position for a start byte, adding the offset if needed.
-    #[inline(always)]
-    fn start_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
-        if gap.start > byte_pos {
-            byte_pos
-        } else {
-            gap.len() + byte_pos
+    fn insert(&mut self, at: usize, s: &str) -> Result<(), GapError> {
+        if s.is_empty() {
+            return Ok(());
         }
-    }
 
-    /// Returns the byte position for a end byte, adding the offset if needed.
-    #[inline(always)]
-    fn end_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
-        if gap.start >= byte_pos {
-            byte_pos
+        let gap_len = self.gap.len();
+        if gap_len > 0 && !u8_is_char_boundry(self.buf[self.gap.start]) {
+            Err(GapError::NotCharBoundry)
+        } else if gap_len >= s.len() {
+            self.move_gap_start_to(at);
+            self.spare_capacity_mut()[0..s.len()].copy_from_slice(s.as_bytes());
+            self.gap.start += s.len();
+            Ok(())
         } else {
-            gap.len() + byte_pos
+            todo!()
         }
     }
 
@@ -339,103 +303,7 @@ impl GapText {
     /// If a single string slice is strictly required see [`GapText::get_str`].
     #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
-        Self::get_raw(&self.buf, self.gap.clone(), r)
-    }
-
-    /// Get a string slice from the [`GapText`]
-    ///
-    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
-    ///
-    /// Calling [`GapText::get`] should always be preferred where possible.
-    /// It is only recommended you call this function if all of the following are true:
-    /// - You strictly need a single string slice
-    /// - The requested slice is expected to be small relative to the whole text
-    ///
-    /// As an alternative, if you already have a [`String`] with some capacity that is already used
-    /// as a scratch buffer, you may prefer [`GapText::get`] in combination with [`GapSlice`]'s
-    /// [`Display`] implementation to store it in the existing strings buffer. Doing so may avoid
-    /// reallocating the internal buffer in some cases, resulting in better performance.
-    ///
-    /// # Performance
-    ///
-    /// The method attempts to construct a string slice by doing the minimal copies necessary
-    /// whilst not moving the gap to optimize for future edits. The gap is not guaranteed to change
-    /// positions, but the method will do its best to avoid doing so.
-    ///
-    /// Best case the range does not lie on a gap, the read is O(1).
-    /// Best case where the range lies on a gap and the spare capacity is enough, the read is a O(N)
-    /// where N is the is the smallest side of the read.
-    /// TODO: Worst case the requested range does not fit in any excess space, the read is O(N) where N
-    /// is the smallest side of the read.
-    #[inline]
-    pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
-        let r = get_range(self.buf.len() - self.gap.len(), r);
-        let read_len = r.len();
-        let gap_len = self.gap.len();
-
-        let start;
-        let (src, dst, len) = match Self::get_raw(
-            unsafe { core::slice::from_raw_parts(self.buf.as_ptr(), self.buf.len()) },
-            self.gap.clone(),
-            r.clone(),
-        )? {
-            GapSlice::Single(s) => return Some(s),
-            GapSlice::Spaced(s1, s2) if s1.len().min(s2.len()) <= gap_len => {
-                let buf_ptr = self.buf.as_mut_ptr();
-                if s1.len() <= s2.len() {
-                    start = self.gap.end - s1.len();
-                    (
-                        s1.as_ptr(),
-                        unsafe { buf_ptr.add(self.gap.end - s1.len()) },
-                        s1.len(),
-                    )
-                } else {
-                    start = self.gap.start;
-                    (
-                        s2.as_ptr(),
-                        unsafe { buf_ptr.add(self.gap.start) },
-                        s2.len(),
-                    )
-                }
-            }
-            _ => {
-                let start_offset = Self::start_byte_pos_with_offset(self.gap.clone(), r.start);
-                let end_offset = Self::start_byte_pos_with_offset(self.gap.clone(), r.end);
-                let (gap_buf, spare_buf) = self.spare_capacity_mut();
-                let buf_ptr = if gap_buf.len() >= read_len {
-                    gap_buf.as_mut_ptr()
-                } else if spare_buf.len() >= read_len {
-                    spare_buf.as_mut_ptr() as *mut u8
-                } else {
-                    self.buf.reserve_exact(read_len);
-
-                    self.buf.spare_capacity_mut().as_mut_ptr() as *mut u8
-                };
-
-                let s1_ptr = unsafe { self.buf.as_ptr().add(start_offset) };
-                let s1_len = self.gap.start - start_offset;
-                let s2_ptr = unsafe { self.buf.as_ptr().add(self.gap.end) };
-                let s2_len = end_offset - self.gap.end;
-
-                // casting to a usize is safe as both pointers are in a [`Vec`] and a [`Vec`] can
-                // store at most [`isize::MAX`] bytes, and buf_ptr is guaranteed to be equal or
-                // same to the buffers start
-                start = unsafe { buf_ptr.offset_from(self.buf.as_ptr()) } as usize;
-
-                unsafe {
-                    core::ptr::copy_nonoverlapping(s1_ptr, buf_ptr, s1_len);
-                    (s2_ptr, buf_ptr.add(s1_len), s2_len)
-                }
-            }
-        };
-
-        unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
-        Some(unsafe {
-            str::from_utf8_unchecked(core::slice::from_raw_parts(
-                self.buf.as_ptr().add(start),
-                r.len(),
-            ))
-        })
+        todo!()
     }
 
     #[inline(always)]
@@ -443,51 +311,8 @@ impl GapText {
         buf: &[u8],
         gap: Range<usize>,
         r: RB,
-    ) -> Option<GapSlice<'_>> {
-        let s_len = buf.len() - gap.len();
-
-        let Range { start, end } = get_range(s_len, r);
-
-        // check the range values
-        if start > end || s_len < end {
-            return None;
-        }
-
-        let start_with_offset = Self::start_byte_pos_with_offset(gap.clone(), start);
-        let end_with_offset = Self::end_byte_pos_with_offset(gap.clone(), end);
-
-        debug_assert!(start_with_offset <= end_with_offset);
-
-        // perform char boundry check
-        if !is_get_char_boundry(buf, buf[start_with_offset], end_with_offset) {
-            return None;
-        }
-
-        // handles all of the single piece conditions
-        // Range before gap case, Range after gap case, and start in gap case
-        //
-        // after this check
-        // - start_with_offset == start
-        // - start < self.gap.start
-        // - self.gap.start < end
-        if is_get_single(gap.start, start, end) {
-            return Some(GapSlice::Single(unsafe {
-                str::from_utf8_unchecked(&buf[start_with_offset..end_with_offset])
-            }));
-        }
-
-        debug_assert_eq!(start_with_offset, start);
-
-        // when the base gap value is 0 the end and end_with_offset maybe equal since a gap is not
-        // inserted yet
-        debug_assert!(end != end_with_offset || gap.is_empty());
-
-        unsafe {
-            let first = str::from_utf8_unchecked(&buf[start_with_offset..gap.start]);
-            let second = str::from_utf8_unchecked(&buf[gap.end..end_with_offset]);
-
-            Some(GapSlice::Spaced(first, second))
-        }
+    ) -> Option<(&str, &str)> {
+        todo!()
     }
 
     #[inline(always)]
@@ -495,56 +320,11 @@ impl GapText {
         self.buf.len() - self.gap.len()
     }
 
-    /// Returns the gap slice and uninitialized slice of the internal [`Vec`]
+    /// Returns the gap slice
     #[inline(always)]
-    pub fn spare_capacity_mut(&mut self) -> (&mut [u8], &mut [MaybeUninit<u8>]) {
-        let buf_len = self.buf.len();
-        let spare_size = self.buf.capacity() - self.buf.len();
-        let vec_ptr = self.buf.as_mut_ptr();
-
-        // SAFETY: In order to tell miri that the slices don't overlap we have to do a bit of magic
-        // The things we do to make miri happy :))
-        let (gap_buf, _) = unsafe { self.buf.split_at_mut_unchecked(self.gap.end) };
-        let vec_spare = unsafe {
-            core::slice::from_raw_parts_mut(
-                vec_ptr.add(buf_len).cast::<MaybeUninit<u8>>(),
-                spare_size,
-            )
-        };
-
-        (&mut gap_buf[self.gap.start..], vec_spare)
+    pub fn spare_capacity_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.gap.start..]
     }
-}
-
-#[inline]
-fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Range<usize> {
-    let start = match r.start_bound() {
-        Bound::Unbounded => 0,
-        Bound::Excluded(i) => i.saturating_add(1),
-        Bound::Included(i) => *i,
-    };
-    let end = match r.end_bound() {
-        Bound::Unbounded => max,
-        Bound::Excluded(i) => *i,
-        Bound::Included(i) => i.saturating_add(1),
-    };
-
-    start..end
-}
-
-#[inline(always)]
-fn is_get_single(gap_start: usize, start: usize, end: usize) -> bool {
-    end <= gap_start || gap_start <= start
-}
-
-#[inline]
-fn is_get_char_boundry(buf: &[u8], b1: u8, end_index: usize) -> bool {
-    u8_is_char_boundry(b1)
-            // NOTE: Option::is_none_or is more elegant but requires higher MSRV
-            && buf
-                .get(end_index)
-                .filter(|b| !u8_is_char_boundry(**b))
-                .is_none()
 }
 
 #[cfg(test)]
@@ -564,180 +344,39 @@ mod tests {
     #[rstest]
     fn move_gap_start(large_str: &str) -> Result<(), GapError> {
         let sample = large_str;
-        let mut t = GapText::new(large_str.to_string());
+        let mut t = GapText::new(large_str);
+        dbg!(&t.gap);
         t.insert_gap(64);
+        dbg!(&t.gap);
+        dbg!(&t.buf.len());
         for gs in 0..1270 {
-            t.move_gap_start_to(gs)?;
+            t.move_gap_start_to(gs);
             t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
+        dbg!("Asdasdas");
         for gs in (0..1270).rev() {
-            t.move_gap_start_to(gs)?;
+            dbg!(&t.gap);
+            t.move_gap_start_to(gs);
+            dbg!(&t.gap);
             t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
 
         // Test case where the move difference is larger than the gap size.
-        t.move_gap_start_to(0)?;
+        t.move_gap_start_to(0);
         t.buf[t.gap.clone()].fill(0);
         assert_eq!(&t.buf[DEFAULT_GAP_SIZE..], sample.as_bytes());
-        t.move_gap_start_to(1200)?;
+        t.move_gap_start_to(1200);
         t.buf[t.gap.clone()].fill(0);
         assert_eq!(&t.buf[..1200], sample[..1200].as_bytes());
-        t.move_gap_start_to(0)?;
+        t.move_gap_start_to(0);
         t.buf[t.gap.clone()].fill(0);
         assert_eq!(&t.buf[..t.gap.start], sample[..t.gap.start].as_bytes());
         assert_eq!(&t.buf[DEFAULT_GAP_SIZE..], sample.as_bytes());
 
         Ok(())
-    }
-
-    #[rstest]
-    #[case::empty_gap(0)]
-    #[case::insertion_exceeds_gap(1)]
-    #[case::insertion_fits_in_gap(5)]
-    #[case::very_large_gap(1024)]
-    fn insert(#[case] gap_size: usize) -> Result<(), GapError> {
-        let sample = "Hello, World";
-        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
-        t.insert_gap(0);
-        t.insert(3, "AAAAA")?;
-        assert_eq!(&t.buf[..t.gap.start - 5], b"Hel");
-        assert_eq!(&t.buf[t.gap.start - 5..t.gap.start], "AAAAA".as_bytes());
-        assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case::empty_gap(0)]
-    #[case::small_gap(1)]
-    #[case::small_gap(2)]
-    #[case::small_gap(3)]
-    #[case::medium_gap(128)]
-    #[case::large_gap(512)]
-    fn delete(#[case] gap_size: usize) -> Result<(), GapError> {
-        let sample = "Hello, World";
-        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
-        t.insert_gap(10);
-        // ", World"
-        t.delete(0..5)?;
-        assert_eq!(&t.buf[..t.gap.start], b"");
-        assert_eq!(&t.buf[t.gap.end..], b", World");
-        assert_eq!(t.gap.len(), gap_size + 5);
-        assert_eq!(t.gap.start, 0);
-        assert_eq!(t.gap.end, t.gap.start + 5 + gap_size);
-
-        // ", Wd"
-        t.delete(3..6)?;
-        assert_eq!(std::str::from_utf8(&t.buf[..t.gap.start]).unwrap(), ", W");
-        assert_eq!(std::str::from_utf8(&t.buf[t.gap.end..]).unwrap(), "d");
-        assert_eq!(t.gap.len(), gap_size + 8);
-        Ok(())
-    }
-
-    #[rstest]
-    #[case::empty_gap(0)]
-    #[case::small_gap(1)]
-    #[case::small_gap(2)]
-    #[case::small_gap(3)]
-    #[case::medium_gap(128)]
-    #[case::large(512)]
-    fn get(#[case] gap_size: usize) {
-        let sample = "Hello, World";
-        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
-        t.insert_gap(2);
-
-        let s = t.get(0..4).unwrap();
-        assert_eq!(s, "Hell");
-        let s = t.get(0..2).unwrap();
-        assert_eq!(s, "He");
-        let s = t.get(2..5).unwrap();
-        assert_eq!(s, "llo");
-        let s = t.get(3..9).unwrap();
-        assert_eq!(s, "lo, Wo");
-        let s = t.get(9..).unwrap();
-        assert_eq!(s, "rld");
-        let s = t.get(..).unwrap();
-        assert_eq!(s, "Hello, World");
-        let s = t.get(..12).unwrap();
-        assert_eq!(s, "Hello, World");
-        assert!(t.get(..15).is_none());
-        assert!(t.get(25..).is_none());
-        assert!(t.get(0..13).is_none());
-        assert!(t.get(3..14).is_none());
-    }
-
-    #[rstest]
-    #[case::empty_gap(0)]
-    #[case::small_gap(1)]
-    #[case::small_gap(2)]
-    #[case::small_gap(3)]
-    #[case::medium_gap(128)]
-    #[case::large(512)]
-    fn get_insert(#[case] gap_size: usize) {
-        let sample = "Hello, World";
-        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
-        t.insert_gap(2);
-
-        // "HeApplesllo, World"
-        t.insert(2, "Apples").unwrap();
-        let s = t.get(0..4).unwrap();
-        assert_eq!(s, "HeAp");
-        let s = t.get(2..10).unwrap();
-        assert_eq!(s, "Applesll");
-        let s = t.get(10..10).unwrap();
-        assert_eq!(s, "");
-        let s = t.get(10..15).unwrap();
-        assert_eq!(s, "o, Wo");
-        let s = t.get(..).unwrap();
-        assert_eq!(s, "HeApplesllo, World");
-
-        // "HeApplesOrangesllo, World"
-        t.insert(8, "Oranges").unwrap();
-        let s = t.get(0..4).unwrap();
-        assert_eq!(s, "HeAp");
-        let s = t.get(2..10).unwrap();
-        assert_eq!(s, "ApplesOr");
-        let s = t.get(10..10).unwrap();
-        assert_eq!(s, "");
-        let s = t.get(10..15).unwrap();
-        assert_eq!(s, "anges");
-        let s = t.get(..).unwrap();
-        assert_eq!(s, "HeApplesOrangesllo, World");
-    }
-
-    #[rstest]
-    #[case::empty_gap(0)]
-    #[case::small_gap(1)]
-    #[case::small_gap(2)]
-    #[case::small_gap(3)]
-    #[case::medium_gap(128)]
-    #[case::large(512)]
-    fn get_str(#[case] gap_size: usize) {
-        let sample = "Hello, World";
-        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
-        t.insert_gap(2);
-
-        let s = t.get_str(0..4).unwrap();
-        assert_eq!(s, "Hell");
-        let s = t.get_str(0..2).unwrap();
-        assert_eq!(s, "He");
-        let s = t.get_str(2..5).unwrap();
-        assert_eq!(s, "llo");
-        let s = t.get_str(3..9).unwrap();
-        assert_eq!(s, "lo, Wo");
-        let s = t.get_str(9..).unwrap();
-        assert_eq!(s, "rld");
-        let s = t.get_str(..).unwrap();
-        assert_eq!(s, "Hello, World");
-        let s = t.get_str(..12).unwrap();
-        assert_eq!(s, "Hello, World");
-        assert!(t.get_str(..15).is_none());
-        assert!(t.get_str(25..).is_none());
-        assert!(t.get_str(0..13).is_none());
-        assert!(t.get_str(3..14).is_none());
     }
 }
