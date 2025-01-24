@@ -288,9 +288,13 @@ impl GapText {
             Ok(())
         } else {
             let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
-            let (first, before_at, after_at, last) =
-                get_parts_insert(first, last, s.as_bytes(), at);
-            self.buf = box_with_gap!(self.base_gap_size(), 3, first, before_at, after_at, last);
+            let (first, mid, last, before_mid) = get_parts_at(first, last, at);
+            let (gap_pos, s1, s2) = if before_mid {
+                (2, s.as_bytes(), mid)
+            } else {
+                (3, mid, s.as_bytes())
+            };
+            self.buf = box_with_gap!(self.base_gap_size(), gap_pos, first, s1, s2, last);
             self.gap.start = at + s.len();
             self.gap.end = self.gap.start + self.base_gap_size();
             Ok(())
@@ -392,13 +396,31 @@ mod tests {
     #[case::insertion_exceeds_gap(1)]
     #[case::insertion_fits_in_gap(5)]
     #[case::very_large_gap(1024)]
-    fn insert(#[case] gap_size: usize) -> Result<(), GapError> {
+    fn insert_after_gap(#[case] gap_size: usize) -> Result<(), GapError> {
         let sample = "Hello, World";
         let mut t = GapText::with_gap_size(sample, gap_size);
         t.insert_gap(0);
         t.insert(3, "AAAAA")?;
         assert_eq!(&t.buf[..3], b"Hel");
-        assert_eq!(&t.buf[3..8], "AAAAA".as_bytes());
+        assert_eq!(&t.buf[3..t.gap.start], "AAAAA".as_bytes());
+        assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::insertion_exceeds_gap(1)]
+    #[case::insertion_fits_in_gap(5)]
+    #[case::very_large_gap(1024)]
+    fn insert_before_gap(#[case] gap_size: usize) -> Result<(), GapError> {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample, gap_size);
+        t.insert_gap(6);
+        t.insert(3, "AAAAA")?;
+        dbg!(&t.buf);
+        assert_eq!(&t.buf[..3], b"Hel");
+        assert_eq!(&t.buf[3..t.gap.start], "AAAAA".as_bytes());
         assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
 
         Ok(())
