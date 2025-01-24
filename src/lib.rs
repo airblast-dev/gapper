@@ -5,15 +5,11 @@ use core::str;
 use std::{
     borrow::Cow,
     fmt::Display,
-    mem::MaybeUninit,
-    ops::{Bound, Range, RangeBounds},
+    ops::{Range, RangeBounds},
 };
 
 use slice::GapSlice;
-use utils::{
-    box_with_gap, end_byte_pos_with_offset, get_parts_at, get_range, is_get_single,
-    u8_is_char_boundry,
-};
+use utils::{get_parts_at, get_parts_insert, u8_is_char_boundry};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 
@@ -254,10 +250,7 @@ impl GapText {
     ///
     /// Panics if the provided position is greater than the string length ([`GapText::len`]).
     fn insert_gap(&mut self, at: usize) {
-        let (first, mid, last) = if self.gap.is_empty() {
-            let (first, last) = self.buf.split_at(at);
-            (first, [].as_slice(), last)
-        } else if self.base_gap_size() > self.gap.len() {
+        let (first, mid, last, before_mid) = if self.base_gap_size() > self.gap.len() {
             let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
             get_parts_at(first, last, at)
         } else {
@@ -265,7 +258,13 @@ impl GapText {
             return;
         };
 
-        self.buf = box_with_gap!(self.base_gap_size(), 2, first, mid, last);
+        self.buf = box_with_gap!(
+            self.base_gap_size(),
+            if before_mid { 1 } else { 2 },
+            first,
+            mid,
+            last
+        );
         self.gap.start = at;
         self.gap.end = at + self.base_gap_size();
     }
@@ -289,8 +288,9 @@ impl GapText {
             Ok(())
         } else {
             let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
-            let (first, mid, last) = get_parts_at(first, last, at);
-            self.buf = box_with_gap!(self.base_gap_size(), 3, first, mid, s.as_bytes(), last);
+            let (first, before_at, after_at, last) =
+                get_parts_insert(first, last, s.as_bytes(), at);
+            self.buf = box_with_gap!(self.base_gap_size(), 3, first, before_at, after_at, last);
             self.gap.start = at + s.len();
             self.gap.end = self.gap.start + self.base_gap_size();
             Ok(())
@@ -338,6 +338,11 @@ mod tests {
 
     use crate::{GapError, DEFAULT_GAP_SIZE};
 
+    // this is very useless where do not know the exact size of the gap
+    // copying this instead of using fill, or similar methods perform much better when testing with miri
+    // without this some of the tests take near a minute to complete
+    const DEFAULT_ZEROS: [u8; DEFAULT_GAP_SIZE] = [0; DEFAULT_GAP_SIZE];
+
     use super::GapText;
     #[fixture]
     #[once]
@@ -345,6 +350,10 @@ mod tests {
         String::from_utf8((1..128).collect()).unwrap().repeat(10)
     }
 
+    // the idea is to fill our string with non zero bytes, and fill the gap with zero's
+    // if any zero is leaked outside of the gap, the test fails
+    // (we actually don't check if a null byte leaks, but rather compare it to the source string
+    // that doesn't contain null bytes)
     #[rstest]
     fn move_gap_start(large_str: &str) -> Result<(), GapError> {
         let sample = large_str;
@@ -352,26 +361,26 @@ mod tests {
         t.insert_gap(64);
         for gs in 0..1270 {
             t.move_gap_start_to(gs);
-            t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
+            t.buf[t.gap.clone()].copy_from_slice(&DEFAULT_ZEROS);
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
         for gs in (0..1270).rev() {
             t.move_gap_start_to(gs);
-            t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
+            t.buf[t.gap.clone()].copy_from_slice(&DEFAULT_ZEROS);
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
 
         // Test case where the move difference is larger than the gap size.
         t.move_gap_start_to(0);
-        t.buf[t.gap.clone()].fill(0);
+        t.buf[t.gap.clone()].copy_from_slice(&DEFAULT_ZEROS);
         assert_eq!(&t.buf[DEFAULT_GAP_SIZE..], sample.as_bytes());
         t.move_gap_start_to(1200);
-        t.buf[t.gap.clone()].fill(0);
+        t.buf[t.gap.clone()].copy_from_slice(&DEFAULT_ZEROS);
         assert_eq!(&t.buf[..1200], sample[..1200].as_bytes());
         t.move_gap_start_to(0);
-        t.buf[t.gap.clone()].fill(0);
+        t.buf[t.gap.clone()].copy_from_slice(&DEFAULT_ZEROS);
         assert_eq!(&t.buf[..t.gap.start], sample[..t.gap.start].as_bytes());
         assert_eq!(&t.buf[DEFAULT_GAP_SIZE..], sample.as_bytes());
 
