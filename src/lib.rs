@@ -9,7 +9,7 @@ use std::{
 };
 
 use slice::GapSlice;
-use utils::{get_parts_at, get_parts_insert, u8_is_char_boundry};
+use utils::{get_parts_at, u8_is_char_boundry};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 

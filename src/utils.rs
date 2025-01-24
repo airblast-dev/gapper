@@ -183,7 +183,7 @@ pub(crate) fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Option<Ran
 }
 
 /// Checks which slice the position is located in and returns ((first[..at], first[at..]), last) or
-/// (first, (last[..at], last[at..])) 
+/// (first, (last[..at], last[at..]))
 ///
 /// If the at position is before mid/after first, returns true
 #[inline(always)]
@@ -202,21 +202,4 @@ pub(crate) fn get_parts_at<'a>(
         (mid, false)
     };
     (first, mid, last, before_mid)
-}
-
-/// Similar to [`get_parts_at`], this will split the slices at the provided position, and will
-/// order the slices for copying.
-#[inline(always)]
-pub(crate) fn get_parts_insert<'a>(
-    first: &'a [u8],
-    last: &'a [u8],
-    insert: &'a [u8],
-    at: usize,
-) -> (&'a [u8], &'a [u8], &'a [u8], &'a [u8]) {
-    let (first, mid, last, before_mid) = get_parts_at(first, last, at);
-    if before_mid {
-        (first, insert, mid, last)
-    } else {
-        (first, mid, insert, last)
-    }
 }
