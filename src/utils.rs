@@ -182,6 +182,9 @@ pub(crate) fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Option<Ran
     }
 }
 
+
+/// Checks which slice the position is located in and returns ((first[..at], first[at..]), last) or
+/// (first, (last[..at], last[at..]))
 #[inline(always)]
 pub(crate) fn get_parts_at<'a>(
     mut first: &'a [u8],

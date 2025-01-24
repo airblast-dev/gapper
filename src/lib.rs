@@ -288,9 +288,11 @@ impl GapText {
             self.gap.start += s.len();
             Ok(())
         } else {
-            let (first, last) = self.buf.split_at(at);
-            let (start, mid, last) = get_parts_at(first, last, at);
-            self.buf = box_with_gap!(self.base_gap_size(), 2, start, s.as_bytes(), mid, last);
+            let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
+            let (first, mid, last) = get_parts_at(first, last, at);
+            self.buf = box_with_gap!(self.base_gap_size(), 3, first, mid, s.as_bytes(), last);
+            self.gap.start = at + s.len();
+            self.gap.end = self.gap.start + self.base_gap_size();
             Ok(())
         }
     }
@@ -378,6 +380,25 @@ mod tests {
         t.buf[t.gap.clone()].fill(0);
         assert_eq!(&t.buf[..t.gap.start], sample[..t.gap.start].as_bytes());
         assert_eq!(&t.buf[DEFAULT_GAP_SIZE..], sample.as_bytes());
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::insertion_exceeds_gap(1)]
+    #[case::insertion_fits_in_gap(5)]
+    #[case::very_large_gap(1024)]
+    fn insert(#[case] gap_size: usize) -> Result<(), GapError> {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample, gap_size);
+        t.insert_gap(0);
+        dbg!(t.gap.clone());
+        t.insert(3, "AAAAA")?;
+        dbg!(t.gap.clone());
+        assert_eq!(&t.buf[..3], b"Hel");
+        assert_eq!(&t.buf[3..8], "AAAAA".as_bytes());
+        assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
 
         Ok(())
     }
