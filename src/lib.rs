@@ -156,19 +156,23 @@ impl GapText {
                     (to, self.gap.end - copy_count, copy_count)
                 }
                 SurroundsDirection::False => {
-                    // cant take any shortcuts use fallback
-                    //
-                    // this probably could be slightly more optimized since we dont actually have to
-                    // move the gap, we just need to copy the values from the position that the gap
-                    // range will be set to
-                    if self.gap.start > to {
-                        self.buf[to..self.gap.end].rotate_right(self.gap.len());
-                        unsafe { self.shift_gap_left(self.gap.start - to) };
+                    // cant panic
+                    // SurroundsDirection::False is only returned
+                    // if to + gap.start < gap.end
+                    // or gap.end < to
+                    let (src, dst) = if self.gap.start > to {
+                        left_shift = self.gap.start - to;
+                        (to..self.gap.start, self.gap.end - to - self.gap.start)
                     } else {
-                        self.buf[self.gap.start..to + self.gap.len()].rotate_left(self.gap.len());
-                        unsafe { self.shift_gap_right(to - self.gap.start) };
-                    }
+                        right_shift = to - self.gap.start;
+                        (self.gap.end..to + self.gap.len(), self.gap.start)
+                    };
 
+                    self.buf.copy_within(src, dst);
+                    unsafe {
+                        self.shift_gap_right(right_shift);
+                        self.shift_gap_left(left_shift);
+                    }
                     return;
                 }
             };
