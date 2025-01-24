@@ -349,21 +349,15 @@ mod tests {
     fn move_gap_start(large_str: &str) -> Result<(), GapError> {
         let sample = large_str;
         let mut t = GapText::new(large_str);
-        dbg!(&t.gap);
         t.insert_gap(64);
-        dbg!(&t.gap);
-        dbg!(&t.buf.len());
         for gs in 0..1270 {
             t.move_gap_start_to(gs);
             t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
         }
-        dbg!("Asdasdas");
         for gs in (0..1270).rev() {
-            dbg!(&t.gap);
             t.move_gap_start_to(gs);
-            dbg!(&t.gap);
             t.buf[t.gap.clone()].copy_from_slice([0; DEFAULT_GAP_SIZE].as_slice());
             assert_eq!(&t.buf[..t.gap.start], sample[..gs].as_bytes());
             assert_eq!(&t.buf[t.gap.end..], sample[gs..].as_bytes());
@@ -393,9 +387,7 @@ mod tests {
         let sample = "Hello, World";
         let mut t = GapText::with_gap_size(sample, gap_size);
         t.insert_gap(0);
-        dbg!(t.gap.clone());
         t.insert(3, "AAAAA")?;
-        dbg!(t.gap.clone());
         assert_eq!(&t.buf[..3], b"Hel");
         assert_eq!(&t.buf[3..8], "AAAAA".as_bytes());
         assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
