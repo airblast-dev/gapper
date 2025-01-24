@@ -28,7 +28,7 @@ pub(crate) fn box_with_gap(b1: &[u8], gap_len: usize, b2: &[u8]) -> Box<[u8]> {
 #[macro_export]
 macro_rules! box_with_gap {
     ($gap_size:expr, $gap_pos:literal, $($slice:expr),*) => {
-        { 
+        {
             let gap_size = $gap_size;
             let slices = [$(&$slice),*];
             const SLICE_COUNT: usize = count_slices!($($slice,)*);
@@ -81,7 +81,7 @@ macro_rules! box_with_gap {
 
             unsafe {
                 uninit.assume_init()
-            } 
+            }
         }
 
     };
@@ -180,4 +180,22 @@ pub(crate) fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Option<Ran
     } else {
         Some(start..end)
     }
+}
+
+#[inline(always)]
+pub(crate) fn get_parts_at<'a>(
+    mut first: &'a [u8],
+    mut last: &'a [u8],
+    at: usize,
+) -> (&'a [u8], &'a [u8], &'a [u8]) {
+    let mid = if first.len() > at {
+        let (f, mid) = first.split_at(at);
+        first = f;
+        mid
+    } else {
+        let (mid, l) = last.split_at(at - first.len());
+        last = l;
+        mid
+    };
+    (first, mid, last)
 }

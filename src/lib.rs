@@ -10,7 +10,10 @@ use std::{
 };
 
 use slice::GapSlice;
-use utils::{box_with_gap, end_byte_pos_with_offset, get_range, is_get_single, u8_is_char_boundry};
+use utils::{
+    box_with_gap, end_byte_pos_with_offset, get_parts_at, get_range, is_get_single,
+    u8_is_char_boundry,
+};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 
@@ -252,19 +255,11 @@ impl GapText {
     /// Panics if the provided position is greater than the string length ([`GapText::len`]).
     fn insert_gap(&mut self, at: usize) {
         let (first, mid, last) = if self.gap.is_empty() {
-            (&self.buf[..at], [].as_slice(), &self.buf[at..])
+            let (first, last) = self.buf.split_at(at);
+            (first, [].as_slice(), last)
         } else if self.base_gap_size() > self.gap.len() {
-            let (mut first, mut last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
-            let mid = if first.len() > at {
-                let (f, mid) = first.split_at(at);
-                first = f;
-                mid
-            } else {
-                let (mid, l) = last.split_at(at - first.len());
-                last = l;
-                mid
-            };
-            (first, mid, last)
+            let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
+            get_parts_at(first, last, at)
         } else {
             self.move_gap_start_to(at);
             return;
@@ -280,8 +275,12 @@ impl GapText {
             return Ok(());
         }
 
+        if at > self.len() {
+            return Err(GapError::OutOfBounds);
+        }
+
         let gap_len = self.gap.len();
-        if gap_len > 0 && !u8_is_char_boundry(self.buf[self.gap.start]) {
+        if !u8_is_char_boundry(self.buf[self.gap.start]) {
             Err(GapError::NotCharBoundry)
         } else if gap_len >= s.len() {
             self.move_gap_start_to(at);
@@ -289,7 +288,10 @@ impl GapText {
             self.gap.start += s.len();
             Ok(())
         } else {
-            todo!()
+            let (first, last) = self.buf.split_at(at);
+            let (start, mid, last) = get_parts_at(first, last, at);
+            self.buf = box_with_gap!(self.base_gap_size(), 2, start, s.as_bytes(), mid, last);
+            Ok(())
         }
     }
 
