@@ -26,11 +26,20 @@ pub(crate) fn box_with_gap(b1: &[u8], gap_len: usize, b2: &[u8]) -> Box<[u8]> {
 
 /// A macro to initialize a Box<[u8]> with a gap, using already existing slices
 ///
-/// It is also possible to emulate this via fully safe methods using iterators, but this often
-/// allows the loops to be unrolled, and uses [`core::ptr::write_bytes`] to initialize the gap.
+/// It is also possible to emulate this via fully safe methods using iterators, but this provides
+/// an much more efficient way to initialize a box slice.
 ///
 /// In benchmarks this gives pretty large performance improvements in best cases, and in worst
-/// cases is slightly faster by a few percent.
+/// cases is slightly faster by a few percent. Using a zeroed vec or repeat(0).take(gap_len) didn't
+/// matter, and this was always faster.
+///
+/// The reasons this macro is faster is thanks to [`core::ptr::write_bytes`], and a bunch of panic
+/// checks being removed. In godbolt the total assembly was nearly reduced to a tenth compared to the
+/// iterator approach. The encapsulating function size was reduced to half. 
+///
+/// The assembly was nearly identical in both cases with the difference of panic checks and a
+/// write_bytes call meaning this is unlikely to be further optimized without the use of simd or
+/// other more exotic solutions.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! box_with_gap {
