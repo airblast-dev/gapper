@@ -301,7 +301,6 @@ impl GapText {
             self.move_gap_start_to(at);
             self.spare_capacity_mut()[0..s.len()].copy_from_slice(s.as_bytes());
             self.gap.start += s.len();
-            Ok(())
         } else {
             let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
             let (first, mid, last, before_mid) = get_parts_at(first, last, at);
@@ -313,8 +312,9 @@ impl GapText {
             self.buf = box_with_gap!(self.base_gap_size(), gap_pos, first, s1, s2, last);
             self.gap.start = at + s.len();
             self.gap.end = self.gap.start + self.base_gap_size();
-            Ok(())
         }
+
+        Ok(())
     }
 
     /// Get a string slice from the [`GapText`]
