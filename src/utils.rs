@@ -4,7 +4,7 @@ use std::{
 };
 
 #[inline(always)]
-pub(crate) fn u8_is_char_boundry(u: u8) -> bool {
+pub(crate) fn u8_is_char_boundary(u: u8) -> bool {
     (u as i8) >= -0x40
 }
 

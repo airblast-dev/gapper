@@ -1,8 +1,8 @@
 #[cold]
 #[track_caller]
 #[inline(never)]
-pub(crate) fn position_not_on_char_boundry(pos: usize) -> ! {
-    panic!("provided position ({pos}) must always lie on a char boundry");
+pub(crate) fn position_not_on_char_boundary(pos: usize) -> ! {
+    panic!("provided position ({pos}) must always lie on a char boundary");
 }
 #[cold]
 #[track_caller]

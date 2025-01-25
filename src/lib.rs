@@ -10,11 +10,11 @@ use std::{
     ops::{Range, RangeBounds},
 };
 
-use panics::{invalid_offset, oob_read, position_not_on_char_boundry};
+use panics::{invalid_offset, oob_read, position_not_on_char_boundary};
 use slice::GapSlice;
 use utils::{
     end_byte_pos_with_offset, get_parts_at, get_range, is_get_single, start_byte_pos_with_offset,
-    u8_is_char_boundry,
+    u8_is_char_boundary,
 };
 
 const DEFAULT_GAP_SIZE: usize = 512;
@@ -22,7 +22,7 @@ const DEFAULT_GAP_SIZE: usize = 512;
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum GapError {
     OutOfBounds,
-    NotCharBoundry,
+    NotCharBoundary,
 }
 
 #[derive(Clone, Debug)]
@@ -106,7 +106,7 @@ impl GapText {
     /// Move the gap start to the provided position
     ///
     /// # Panics
-    /// If the provided position is not on a char boundry, or is out of bounds panics.
+    /// If the provided position is not on a char boundary, or is out of bounds panics.
     pub fn move_gap_start_to(&mut self, to: usize) {
         if self.gap.start == to {
             return;
@@ -121,8 +121,8 @@ impl GapText {
             oob_read();
         }
 
-        if !self.is_char_boundry(to) {
-            position_not_on_char_boundry(to);
+        if !self.is_char_boundary(to) {
+            position_not_on_char_boundary(to);
         }
 
         enum SurroundsDirection {
@@ -245,14 +245,14 @@ impl GapText {
     /// # Panics
     ///
     /// Panics if the provided position is greater than the string length ([`GapText::len`]), or
-    /// the position does not lie on a char boundry.
+    /// the position does not lie on a char boundary.
     fn insert_gap(&mut self, at: usize) {
         if self.len() < at {
             oob_read();
         }
 
-        if !self.is_char_boundry(at) {
-            position_not_on_char_boundry(at);
+        if !self.is_char_boundary(at) {
+            position_not_on_char_boundary(at);
         }
 
         let (first, mid, last, before_mid) = if self.base_gap_size() > self.gap.len() {
@@ -284,8 +284,8 @@ impl GapText {
 
         if at > self.len() {
             return Err(GapError::OutOfBounds);
-        } else if !self.is_char_boundry(at) {
-            return Err(GapError::NotCharBoundry);
+        } else if !self.is_char_boundary(at) {
+            return Err(GapError::NotCharBoundary);
         }
 
         let gap_len = self.gap.len();
@@ -311,11 +311,11 @@ impl GapText {
 
     /// Get a string slice from the [`GapText`]
     ///
-    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
+    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundary.
     #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
         let r = get_range(self.len(), r)?;
-        if !self.is_char_boundry(r.start) || !self.is_char_boundry(r.end) {
+        if !self.is_char_boundary(r.start) || !self.is_char_boundary(r.end) {
             return None;
         }
 
@@ -334,7 +334,7 @@ impl GapText {
 
     /// Returns the string slice for the provided range
     ///
-    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
+    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundary.
     ///
     /// # Note
     /// This may cause the gap to be moved, as such it is only recommended if you know the provided
@@ -342,7 +342,7 @@ impl GapText {
     #[inline(always)]
     pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
         let r = get_range(self.len(), r)?;
-        if !self.is_char_boundry(r.start) || !self.is_char_boundry(r.end) {
+        if !self.is_char_boundary(r.start) || !self.is_char_boundary(r.end) {
             return None;
         }
 
@@ -362,14 +362,14 @@ impl GapText {
     }
 
     #[inline(always)]
-    fn is_char_boundry(&self, pos: usize) -> bool {
+    fn is_char_boundary(&self, pos: usize) -> bool {
         if pos == 0 {
             return true;
         }
         let real_pos = start_byte_pos_with_offset(self.gap.clone(), pos);
         match self.buf.get(real_pos) {
             None => real_pos == self.buf.len(),
-            Some(u) => u8_is_char_boundry(*u),
+            Some(u) => u8_is_char_boundary(*u),
         }
     }
 }
@@ -470,8 +470,8 @@ mod tests {
         let mut t = GapText::with_gap_size(sample, 20);
         t.insert_gap(6);
         //assert_eq!(t.insert(11, "AAぢAA"), Ok(()));
-        assert_eq!(t.insert(12, "AAぢAA"), Err(GapError::NotCharBoundry));
-        assert_eq!(t.insert(13, "AAぢAA"), Err(GapError::NotCharBoundry));
+        assert_eq!(t.insert(12, "AAぢAA"), Err(GapError::NotCharBoundary));
+        assert_eq!(t.insert(13, "AAぢAA"), Err(GapError::NotCharBoundary));
         //assert_eq!(t.insert(14, "AAぢAA"), Ok(()));
         assert_eq!(t.insert(15, "AAぢAA"), Err(GapError::OutOfBounds));
         assert_eq!(t.insert(16, "AAぢAA"), Err(GapError::OutOfBounds));
