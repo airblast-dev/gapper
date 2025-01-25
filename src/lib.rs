@@ -1,3 +1,4 @@
+mod panics;
 mod slice;
 mod utils;
 
@@ -8,8 +9,9 @@ use std::{
     ops::{Range, RangeBounds},
 };
 
+use panics::{oob_read, position_not_on_char_boundry};
 use slice::GapSlice;
-use utils::{get_parts_at, u8_is_char_boundry};
+use utils::{get_parts_at, start_byte_pos_with_offset, u8_is_char_boundry};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 
@@ -97,6 +99,9 @@ impl GapText {
     }
 
     /// Move the gap start to the provided position
+    ///
+    /// # Panics
+    /// If the provided position is not on a char boundry, or is out of bounds panics.
     pub fn move_gap_start_to(&mut self, to: usize) {
         if self.gap.start == to {
             return;
@@ -107,14 +112,12 @@ impl GapText {
             return;
         }
 
-        if self.buf.len() - self.gap.len() < to {
-            #[cold]
-            #[inline(never)]
-            #[track_caller]
-            fn oob_read() -> ! {
-                panic!("index for gap move is out of bounds");
-            }
+        if self.len() < to {
             oob_read();
+        }
+
+        if !u8_is_char_boundry(self.buf[start_byte_pos_with_offset(self.gap.clone(), to)]) {
+            position_not_on_char_boundry(to);
         }
 
         enum SurroundsDirection {
@@ -252,8 +255,17 @@ impl GapText {
     ///
     /// # Panics
     ///
-    /// Panics if the provided position is greater than the string length ([`GapText::len`]).
+    /// Panics if the provided position is greater than the string length ([`GapText::len`]), or
+    /// the position does not lie on a char boundry.
     fn insert_gap(&mut self, at: usize) {
+        if self.len() < at {
+            oob_read();
+        }
+
+        if !u8_is_char_boundry(self.buf[start_byte_pos_with_offset(self.gap.clone(), at)]) {
+            position_not_on_char_boundry(at);
+        }
+
         let (first, mid, last, before_mid) = if self.base_gap_size() > self.gap.len() {
             let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
             get_parts_at(first, last, at)
@@ -280,12 +292,12 @@ impl GapText {
 
         if at > self.len() {
             return Err(GapError::OutOfBounds);
+        } else if !u8_is_char_boundry(self.buf[start_byte_pos_with_offset(self.gap.clone(), at)]) {
+            return Err(GapError::NotCharBoundry);
         }
 
         let gap_len = self.gap.len();
-        if !u8_is_char_boundry(self.buf[self.gap.start]) {
-            Err(GapError::NotCharBoundry)
-        } else if gap_len >= s.len() {
+        if gap_len >= s.len() {
             self.move_gap_start_to(at);
             self.spare_capacity_mut()[0..s.len()].copy_from_slice(s.as_bytes());
             self.gap.start += s.len();
