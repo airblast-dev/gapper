@@ -3,6 +3,7 @@ mod slice;
 mod utils;
 
 use core::str;
+use core::str::from_utf8_unchecked;
 use std::{
     borrow::Cow,
     fmt::Display,
@@ -11,7 +12,10 @@ use std::{
 
 use panics::{oob_read, position_not_on_char_boundry};
 use slice::GapSlice;
-use utils::{get_parts_at, start_byte_pos_with_offset, u8_is_char_boundry};
+use utils::{
+    end_byte_pos_with_offset, get_parts_at, get_range, is_get_single, start_byte_pos_with_offset,
+    u8_is_char_boundry,
+};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 
@@ -40,7 +44,8 @@ impl Default for GapText {
 
 impl Display for GapText {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.get(..).unwrap())
+        let (s1, s2) = self.get(..).unwrap();
+        write!(f, "{s1}{s2}")
     }
 }
 
@@ -320,23 +325,35 @@ impl GapText {
     /// Get a string slice from the [`GapText`]
     ///
     /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
-    ///
-    /// The provided range may conflict with the gap, in that case a [`GapSlice::Spaced`] variant
-    /// is returned containing the requested range with the gap being skipped.
-    ///
-    /// If a single string slice is strictly required see [`GapText::get_str`].
     #[inline]
-    pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
-        todo!()
+    pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<(&str, &str)> {
+        let r = get_range(self.len(), r)?;
+        if !self.is_char_boundry(r.start) || !self.is_char_boundry(r.end) {
+            return None;
+        }
+
+        let start = start_byte_pos_with_offset(self.gap.clone(), r.start);
+        let end = end_byte_pos_with_offset(self.gap.clone(), r.end);
+        if is_get_single(self.gap.start, start, end) {
+            return Some(unsafe { (from_utf8_unchecked(&self.buf[start..end]), "") });
+        }
+        unsafe {
+            Some((
+                from_utf8_unchecked(&self.buf[start..self.gap.start]),
+                from_utf8_unchecked(&self.buf[self.gap.end..end]),
+            ))
+        }
     }
 
     #[inline(always)]
-    fn get_raw<RB: RangeBounds<usize>>(
-        buf: &[u8],
-        gap: Range<usize>,
-        r: RB,
-    ) -> Option<(&str, &str)> {
-        todo!()
+    pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
+        let r = get_range(self.len(), r)?;
+        if !self.is_char_boundry(r.start) || !self.is_char_boundry(r.end) {
+            return None;
+        }
+
+        self.move_gap_start_to(r.end);
+        unsafe { Some(from_utf8_unchecked(&self.buf[r.start..r.end])) }
     }
 
     #[inline(always)]
