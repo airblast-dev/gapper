@@ -450,11 +450,16 @@ mod tests {
     }
 
     #[test]
-    fn insert_non_char_boundry() -> Result<(), GapError> {
+    fn insert_bad_pos() -> Result<(), GapError> {
         let sample = "Hello, Worlぬ";
         let mut t = GapText::with_gap_size(sample, 20);
         t.insert_gap(6);
+        assert_eq!(t.insert(11, "AAぢAA"), Ok(()));
+        assert_eq!(t.insert(12, "AAぢAA"), Err(GapError::NotCharBoundry));
+        assert_eq!(t.insert(13, "AAぢAA"), Err(GapError::NotCharBoundry));
         assert_eq!(t.insert(14, "AAぢAA"), Err(GapError::NotCharBoundry));
+        assert_eq!(t.insert(15, "AAぢAA"), Err(GapError::OutOfBounds));
+        assert_eq!(t.insert(16, "AAぢAA"), Err(GapError::OutOfBounds));
         Ok(())
     }
 }
