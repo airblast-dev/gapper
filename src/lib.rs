@@ -352,7 +352,6 @@ impl GapText {
 
     fn is_char_boundry(&self, pos: usize) -> bool {
         let real_pos = start_byte_pos_with_offset(self.gap.clone(), pos);
-        dbg!(real_pos);
         match self.buf.get(real_pos) {
             None => real_pos == self.buf.len(),
             Some(u) => u8_is_char_boundry(*u),
