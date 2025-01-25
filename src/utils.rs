@@ -24,6 +24,13 @@ pub(crate) fn box_with_gap(b1: &[u8], gap_len: usize, b2: &[u8]) -> Box<[u8]> {
     }
 }
 
+/// A macro to initialize a Box<[u8]> with a gap, using already existing slices
+///
+/// It is also possible to emulate this via fully safe methods using iterators, but this often
+/// allows the loops to be unrolled, and uses [`core::ptr::write_bytes`] to initialize the gap.
+///
+/// In benchmarks this gives pretty large performance improvements in best cases, and in worst
+/// cases is slightly faster by a few percent.
 #[macro_export]
 macro_rules! box_with_gap {
     ($gap_size:expr, $gap_pos:expr, $($slice:expr),*) => {

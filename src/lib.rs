@@ -329,6 +329,13 @@ impl GapText {
         }
     }
 
+    /// Returns the string slice for the provided range
+    ///
+    /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
+    ///
+    /// # Note
+    /// This may cause the gap to be moved, as such it is only recommended if you know the provided
+    /// range will be small.
     #[inline(always)]
     pub fn get_str<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
         let r = get_range(self.len(), r)?;
