@@ -31,6 +31,7 @@ pub(crate) fn box_with_gap(b1: &[u8], gap_len: usize, b2: &[u8]) -> Box<[u8]> {
 ///
 /// In benchmarks this gives pretty large performance improvements in best cases, and in worst
 /// cases is slightly faster by a few percent.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! box_with_gap {
     ($gap_size:expr, $gap_pos:expr, $($slice:expr),*) => {
@@ -93,6 +94,7 @@ macro_rules! box_with_gap {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! count_slices {
     ($slice:expr, $($other:expr,)*) => {
