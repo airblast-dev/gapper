@@ -10,7 +10,7 @@ use std::{
     ops::{Range, RangeBounds},
 };
 
-use panics::{oob_read, position_not_on_char_boundry};
+use panics::{invalid_offset, oob_read, position_not_on_char_boundry};
 use slice::GapSlice;
 use utils::{
     end_byte_pos_with_offset, get_parts_at, get_range, is_get_single, start_byte_pos_with_offset,
@@ -185,21 +185,7 @@ impl GapText {
                 }
             };
 
-        #[cold]
-        #[inline(never)]
-        fn invalid_offset(
-            len: usize,
-            src_offset: usize,
-            dst_offset: usize,
-            copy_count: usize,
-        ) -> ! {
-            panic!(
-                "pointers should never overlap when copying, \
-                len is {}, source pointer offset is {}, destination \
-                pointer offset is {} with a copy count of {}",
-                len, src_offset, dst_offset, copy_count
-            );
-        }
+        
 
         if self.buf.len() < src_addr_offset.max(dst_addr_offset) + copy_count
             || src_addr_offset.abs_diff(dst_addr_offset) < copy_count
