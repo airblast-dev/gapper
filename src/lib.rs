@@ -44,8 +44,8 @@ impl Default for GapText {
 
 impl Display for GapText {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (s1, s2) = self.get(..).unwrap();
-        write!(f, "{s1}{s2}")
+        let gs = self.get(..).unwrap();
+        write!(f, "{gs}")
     }
 }
 
@@ -326,7 +326,7 @@ impl GapText {
     ///
     /// Returns [`None`] if the provided range is out of bounds or does not lie on a char boundry.
     #[inline]
-    pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<(&str, &str)> {
+    pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<GapSlice> {
         let r = get_range(self.len(), r)?;
         if !self.is_char_boundry(r.start) || !self.is_char_boundry(r.end) {
             return None;
@@ -335,10 +335,10 @@ impl GapText {
         let start = start_byte_pos_with_offset(self.gap.clone(), r.start);
         let end = end_byte_pos_with_offset(self.gap.clone(), r.end);
         if is_get_single(self.gap.start, start, end) {
-            return Some(unsafe { (from_utf8_unchecked(&self.buf[start..end]), "") });
+            return Some(unsafe { GapSlice(from_utf8_unchecked(&self.buf[start..end]), "") });
         }
         unsafe {
-            Some((
+            Some(GapSlice(
                 from_utf8_unchecked(&self.buf[start..self.gap.start]),
                 from_utf8_unchecked(&self.buf[self.gap.end..end]),
             ))
@@ -483,5 +483,37 @@ mod tests {
         assert_eq!(t.insert(15, "AAぢAA"), Err(GapError::OutOfBounds));
         assert_eq!(t.insert(16, "AAぢAA"), Err(GapError::OutOfBounds));
         Ok(())
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::small_gap(1)]
+    #[case::small_gap(2)]
+    #[case::small_gap(3)]
+    #[case::medium_gap(128)]
+    #[case::large(512)]
+    fn get(#[case] gap_size: usize) {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
+        t.insert_gap(2);
+
+        let s = t.get(0..4).unwrap();
+        assert_eq!(s, "Hell");
+        let s = t.get(0..2).unwrap();
+        assert_eq!(s, "He");
+        let s = t.get(2..5).unwrap();
+        assert_eq!(s, "llo");
+        let s = t.get(3..9).unwrap();
+        assert_eq!(s, "lo, Wo");
+        let s = t.get(9..).unwrap();
+        assert_eq!(s, "rld");
+        let s = t.get(..).unwrap();
+        assert_eq!(s, "Hello, World");
+        let s = t.get(..12).unwrap();
+        assert_eq!(s, "Hello, World");
+        assert!(t.get(..15).is_none());
+        assert!(t.get(25..).is_none());
+        assert!(t.get(0..13).is_none());
+        assert!(t.get(3..14).is_none());
     }
 }
