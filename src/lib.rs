@@ -473,7 +473,6 @@ mod tests {
     #[test]
     fn insert_bad_pos() -> Result<(), GapError> {
         let sample = "Hello, Worlぬ";
-        let mut st = sample.to_string();
         let mut t = GapText::with_gap_size(sample, 20);
         t.insert_gap(6);
         //assert_eq!(t.insert(11, "AAぢAA"), Ok(()));
