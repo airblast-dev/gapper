@@ -31,7 +31,8 @@ pub(crate) fn box_with_gap(b1: &[u8], gap_len: usize, b2: &[u8]) -> Box<[u8]> {
 ///
 /// In benchmarks this gives pretty large performance improvements in best cases, and in worst
 /// cases is slightly faster by a few percent. Using a zeroed vec or repeat(0).take(gap_len) didn't
-/// matter, and this was always faster.
+/// matter, and this was always faster. (using a fix sized and zeroed array was faster but this is
+/// meaningless since we never know the gap's size at compile time)
 ///
 /// The reasons this macro is faster is thanks to [`core::ptr::write_bytes`], and a bunch of panic
 /// checks being removed. In godbolt the total assembly was nearly reduced to a tenth compared to the
