@@ -347,7 +347,7 @@ impl GapText {
     /// Returns the gap slice
     #[inline(always)]
     pub fn spare_capacity_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[self.gap.start..]
+        &mut self.buf[self.gap.start..self.gap.end]
     }
 }
 
