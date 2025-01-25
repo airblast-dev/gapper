@@ -93,16 +93,14 @@ macro_rules! box_with_gap {
 
     };
 }
-
+// taken from and slightly modified to use with expr fragment
+// https://veykril.github.io/tlborm/decl-macros/building-blocks/counting.html#bit-twiddling
 #[doc(hidden)]
 #[macro_export]
 macro_rules! count_slices {
-    ($slice:expr, $($other:expr,)*) => {
-        1 + count_slices!($($other,)*)
-    };
-    () => {
-        0
-    }
+    () => { 0 };
+    ($odd:expr, $($a:expr, $b:expr,)*) => { (count_slices!($($a,)*) << 1) | 1 };
+    ($($a:expr, $even:expr,)*) => { count_slices!($($a,)*) << 1 };
 }
 
 #[inline(always)]
