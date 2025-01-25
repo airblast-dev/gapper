@@ -413,13 +413,13 @@ mod tests {
     #[case::insertion_fits_in_gap(5)]
     #[case::very_large_gap(1024)]
     fn insert_after_gap(#[case] gap_size: usize) -> Result<(), GapError> {
-        let sample = "Hello, World";
+        let sample = "Hello, Worlぬ";
         let mut t = GapText::with_gap_size(sample, gap_size);
         t.insert_gap(0);
-        t.insert(3, "AAAAA")?;
+        t.insert(3, "AAぢAA")?;
         assert_eq!(&t.buf[..3], b"Hel");
-        assert_eq!(&t.buf[3..t.gap.start], "AAAAA".as_bytes());
-        assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
+        assert_eq!(&t.buf[3..t.gap.start], "AAぢAA".as_bytes());
+        assert_eq!(&t.buf[t.gap.end..], "lo, Worlぬ".as_bytes());
 
         Ok(())
     }
@@ -430,14 +430,13 @@ mod tests {
     #[case::insertion_fits_in_gap(5)]
     #[case::very_large_gap(1024)]
     fn insert_before_gap(#[case] gap_size: usize) -> Result<(), GapError> {
-        let sample = "Hello, World";
+        let sample = "Hello, Worlぬ";
         let mut t = GapText::with_gap_size(sample, gap_size);
         t.insert_gap(6);
-        t.insert(3, "AAAAA")?;
-        dbg!(&t.buf);
+        t.insert(3, "AAぢAA")?;
         assert_eq!(&t.buf[..3], b"Hel");
-        assert_eq!(&t.buf[3..t.gap.start], "AAAAA".as_bytes());
-        assert_eq!(&t.buf[t.gap.end..], "lo, World".as_bytes());
+        assert_eq!(&t.buf[3..t.gap.start], "AAぢAA".as_bytes());
+        assert_eq!(&t.buf[t.gap.end..], "lo, Worlぬ".as_bytes());
 
         Ok(())
     }
