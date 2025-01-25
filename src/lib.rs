@@ -170,7 +170,7 @@ impl GapText {
                     // or gap.end < to
                     let (src, dst) = if self.gap.start > to {
                         left_shift = self.gap.start - to;
-                        (to..self.gap.start, self.gap.end - to - self.gap.start)
+                        (to..self.gap.start, self.gap.end - left_shift)
                     } else {
                         right_shift = to - self.gap.start;
                         (self.gap.end..to + self.gap.len(), self.gap.start)
@@ -184,8 +184,6 @@ impl GapText {
                     return;
                 }
             };
-
-        
 
         if self.buf.len() < src_addr_offset.max(dst_addr_offset) + copy_count
             || src_addr_offset.abs_diff(dst_addr_offset) < copy_count
@@ -500,5 +498,37 @@ mod tests {
         assert!(t.get(25..).is_none());
         assert!(t.get(0..13).is_none());
         assert!(t.get(3..14).is_none());
+    }
+
+    #[rstest]
+    #[case::empty_gap(0)]
+    #[case::small_gap(1)]
+    #[case::small_gap(2)]
+    #[case::small_gap(3)]
+    #[case::medium_gap(128)]
+    #[case::large(512)]
+    fn get_str(#[case] gap_size: usize) {
+        let sample = "Hello, World";
+        let mut t = GapText::with_gap_size(sample.to_string(), gap_size);
+        t.insert_gap(2);
+
+        let s = t.get_str(0..4).unwrap();
+        assert_eq!(s, "Hell");
+        let s = t.get_str(0..2).unwrap();
+        assert_eq!(s, "He");
+        let s = t.get_str(2..5).unwrap();
+        assert_eq!(s, "llo");
+        let s = t.get_str(3..9).unwrap();
+        assert_eq!(s, "lo, Wo");
+        let s = t.get_str(9..).unwrap();
+        assert_eq!(s, "rld");
+        let s = t.get_str(..).unwrap();
+        assert_eq!(s, "Hello, World");
+        let s = t.get_str(..12).unwrap();
+        assert_eq!(s, "Hello, World");
+        assert!(t.get_str(..15).is_none());
+        assert!(t.get_str(25..).is_none());
+        assert!(t.get_str(0..13).is_none());
+        assert!(t.get_str(3..14).is_none());
     }
 }
