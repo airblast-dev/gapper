@@ -15,7 +15,7 @@ use utils::{get_parts_at, start_byte_pos_with_offset, u8_is_char_boundry};
 
 const DEFAULT_GAP_SIZE: usize = 512;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum GapError {
     OutOfBounds,
     NotCharBoundry,
@@ -262,7 +262,7 @@ impl GapText {
             oob_read();
         }
 
-        if !u8_is_char_boundry(self.buf[start_byte_pos_with_offset(self.gap.clone(), at)]) {
+        if !self.is_char_boundry(at) {
             position_not_on_char_boundry(at);
         }
 
@@ -292,7 +292,7 @@ impl GapText {
 
         if at > self.len() {
             return Err(GapError::OutOfBounds);
-        } else if !u8_is_char_boundry(self.buf[start_byte_pos_with_offset(self.gap.clone(), at)]) {
+        } else if !self.is_char_boundry(at) {
             return Err(GapError::NotCharBoundry);
         }
 
@@ -349,6 +349,14 @@ impl GapText {
     pub fn spare_capacity_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.gap.start..self.gap.end]
     }
+
+    fn is_char_boundry(&self, pos: usize) -> bool {
+        let real_pos = start_byte_pos_with_offset(self.gap.clone(), pos);
+        match self.buf.get(real_pos) {
+            Some(u) => u8_is_char_boundry(*u),
+            None => real_pos == self.len()
+        }
+    } 
 }
 
 #[cfg(test)]
@@ -438,6 +446,15 @@ mod tests {
         assert_eq!(&t.buf[3..t.gap.start], "AAぢAA".as_bytes());
         assert_eq!(&t.buf[t.gap.end..], "lo, Worlぬ".as_bytes());
 
+        Ok(())
+    }
+
+    #[test]
+    fn insert_non_char_boundry() -> Result<(), GapError> {
+        let sample = "Hello, Worlぬ";
+        let mut t = GapText::with_gap_size(sample, 20);
+        t.insert_gap(6);
+        assert_eq!(t.insert(14, "AAぢAA"), Err(GapError::NotCharBoundry));
         Ok(())
     }
 }

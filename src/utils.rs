@@ -102,41 +102,6 @@ pub(crate) fn is_get_single(gap_start: usize, start: usize, end: usize) -> bool 
     end <= gap_start || gap_start <= start
 }
 
-#[inline(always)]
-pub(crate) fn is_get_char_boundry(buf: &[u8], b1: u8, end_index: usize) -> bool {
-    u8_is_char_boundry(b1)
-            // NOTE: Option::is_none_or is more elegant but requires higher MSRV
-            && buf
-                .get(end_index)
-                .filter(|b| !u8_is_char_boundry(**b))
-                .is_none()
-}
-
-#[inline(always)]
-pub(crate) fn is_get_str_valid(
-    r: Range<usize>,
-    buf: &[u8],
-    gap: Range<usize>,
-) -> Option<(usize, usize)> {
-    // check the range values
-    let s_len = buf.len() - gap.len();
-    if s_len < r.end {
-        return None;
-    }
-
-    let start_with_offset = start_byte_pos_with_offset(gap.clone(), r.start);
-    let end_with_offset = end_byte_pos_with_offset(gap.clone(), r.end);
-
-    debug_assert!(start_with_offset <= end_with_offset);
-
-    // perform char boundry check
-    if !is_get_char_boundry(buf, buf[start_with_offset], end_with_offset) {
-        return None;
-    }
-
-    Some((start_with_offset, end_with_offset))
-}
-
 /// Returns the byte position for a start byte, adding the offset if needed.
 #[inline(always)]
 pub(crate) fn start_byte_pos_with_offset(gap: Range<usize>, byte_pos: usize) -> usize {
