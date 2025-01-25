@@ -274,6 +274,9 @@ impl GapText {
         self.gap.end = at + self.base_gap_size();
     }
 
+    /// Inserts the provided string at the provided index
+    ///
+    /// Returns an error if the provided range is not on a char boundary, or is out of bounds.
     pub fn insert(&mut self, at: usize, s: &str) -> Result<(), GapError> {
         if s.is_empty() {
             return Ok(());
