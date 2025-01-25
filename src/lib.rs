@@ -274,7 +274,7 @@ impl GapText {
         self.gap.end = at + self.base_gap_size();
     }
 
-    fn insert(&mut self, at: usize, s: &str) -> Result<(), GapError> {
+    pub fn insert(&mut self, at: usize, s: &str) -> Result<(), GapError> {
         if s.is_empty() {
             return Ok(());
         }
