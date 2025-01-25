@@ -242,6 +242,9 @@ impl GapText {
 
     /// Insert a gap at a specific position
     ///
+    /// If a gap already exists, and is bigger than the base_gap_size, the gap start will be moved
+    /// to the provided position.
+    ///
     /// # Panics
     ///
     /// Panics if the provided position is greater than the string length ([`GapText::len`]), or
