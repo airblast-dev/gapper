@@ -11,7 +11,7 @@ use std::{
     ops::{Range, RangeBounds},
 };
 
-use builder::{GapBufBuilder, MaxGapSize};
+use builder::{GapBufBuilder, GapSizer};
 use panics::{invalid_offset, oob_read, position_not_on_char_boundary};
 use slice::GapSlice;
 use utils::{
@@ -32,7 +32,7 @@ pub struct GapText {
     buf: Box<[u8]>,
     gap: Range<usize>,
     base_gap_size: usize,
-    max_gap_size: MaxGapSize,
+    max_gap_size: GapSizer,
 }
 
 impl Default for GapText {

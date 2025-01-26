@@ -4,7 +4,7 @@ use crate::{box_with_gap, panics::invalid_max_gap_size, GapText, DEFAULT_GAP_SIZ
 
 pub struct GapBufBuilder {
     base_gap_size: usize,
-    max_gap_size: MaxGapSize,
+    max_gap_size: MaxGapSizer,
 }
 
 impl Default for GapBufBuilder {
@@ -17,7 +17,7 @@ impl GapBufBuilder {
     pub const fn new() -> Self {
         Self {
             base_gap_size: DEFAULT_GAP_SIZE,
-            max_gap_size: MaxGapSize::Percentage(5),
+            max_gap_size: MaxGapSizer::Percentage(5),
         }
     }
 
@@ -26,7 +26,7 @@ impl GapBufBuilder {
         self
     }
 
-    pub const fn max_gap_size(mut self, mut max_gap_size: MaxGapSize) -> Self {
+    pub const fn max_gap_size(mut self, mut max_gap_size: MaxGapSizer) -> Self {
         if !max_gap_size.try_make_valid() {
             invalid_max_gap_size();
         }
@@ -89,15 +89,19 @@ impl GapBufBuilder {
     }
 }
 
+struct State {
+    max_gap_size: MaxGapSizer,
+}
+
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug)]
-pub enum MaxGapSize {
+pub enum MaxGapSizer {
     Percentage(u8),
     Fixed(u32),
     Func(fn(usize, usize, usize) -> usize),
 }
 
-impl MaxGapSize {
+impl MaxGapSizer {
     #[inline]
     fn max_gap_size(&self, base_gap_len: usize, gap: usize, total_len: usize) -> usize {
         match self {
@@ -114,7 +118,7 @@ impl MaxGapSize {
     }
 }
 
-impl MaxGapSize {
+impl MaxGapSizer {
     #[inline(always)]
     const fn try_make_valid(&mut self) -> bool {
         if let Self::Percentage(ref mut p) = self {
@@ -126,7 +130,7 @@ impl MaxGapSize {
     }
 }
 
-impl Default for MaxGapSize {
+impl Default for MaxGapSizer {
     #[inline(always)]
     fn default() -> Self {
         Self::Percentage(5)
