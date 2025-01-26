@@ -20,13 +20,13 @@ use utils::{
 const DEFAULT_GAP_SIZE: usize = 512;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum GapError {
+pub enum GapError {
     OutOfBounds,
     NotCharBoundary,
 }
 
 #[derive(Clone, Debug)]
-struct GapText {
+pub struct GapText {
     buf: Box<[u8]>,
     gap: Range<usize>,
     base_gap_size: usize,
@@ -50,7 +50,7 @@ impl Display for GapText {
 }
 
 impl GapText {
-    fn new<'a, S>(s: S) -> Self
+    pub fn new<'a, S>(s: S) -> Self
     where
         S: Into<Cow<'a, str>>,
     {
@@ -86,7 +86,7 @@ impl GapText {
         }
     }
 
-    fn with_gap_size<'a, S>(s: S, size: usize) -> Self
+    pub fn with_gap_size<'a, S>(s: S, size: usize) -> Self
     where
         S: Into<Cow<'a, str>>,
     {
@@ -359,9 +359,70 @@ impl GapText {
     }
 
     /// Returns the gap slice
+    ///
+    /// The returned slice may contain zeros, or content that were here before the gap was moved.
     #[inline(always)]
     pub fn spare_capacity_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.gap.start..self.gap.end]
+    }
+
+    /// Grows the gap by the provided value
+    ///
+    /// When inserting multiple slices, the gap may be resized multiple times possibly causing large copies.
+    /// To avoid this, you can grow the gap to account for all of the slices and insert them via
+    /// [`GapText::insert`].
+    ///
+    /// # Example
+    ///
+    /// Good
+    /// ```
+    /// use gapstr::GapText;
+    ///
+    /// // A gap with a size of 3 defeats the purpose of a gap buffer, only used here to emulate
+    /// // the worst case.
+    /// let mut gap_str = GapText::with_gap_size("New GapText!", 3);
+    /// let slices = vec!["Hello, World!"; 10];
+    /// let len = slices.iter().copied().map(str::len).sum();
+    ///
+    /// // Reallocates the buffer once.
+    /// gap_str.grow(len);
+    ///
+    /// // Copy over the slices without reallocating.
+    /// for s in slices {
+    ///     gap_str.insert(5, s);
+    /// }
+    /// ```
+    ///
+    /// Bad
+    /// ```
+    /// use gapstr::GapText;
+    ///
+    /// // A gap with a size of 3 defeats the purpose of a gap buffer, only used here to emulate
+    /// // the worst case.
+    /// let mut gap_str = GapText::with_gap_size("New GapText!", 3);
+    /// let slices = vec!["Hello, World!"; 10];
+    /// 
+    /// // Since our gap is smaller than the inserted slices length, this reallocates the internal
+    /// // buffer on every loop.
+    /// for s in slices {
+    ///     gap_str.insert(5, s);
+    /// }
+    /// ```
+    pub fn grow(&mut self, by: usize) {
+        // SAFETY: the worst we can get is two empty strings since we pass (..).
+        let GapSlice(start, end) = unsafe { self.get(..).unwrap_unchecked() };
+        let gap_len = self.gap.len();
+        self.buf = box_with_gap!(gap_len + by, 1, start, end);
+        self.gap.end += by;
+    }
+
+    pub fn shrink_to(&mut self, to: usize) {
+        if self.gap.len() < to {
+            return;
+        }
+
+        let (first, last) = self.get_slices();
+        self.buf = box_with_gap!(to, 1, first, last);
     }
 
     /// Returns the the parts before and after the gap
