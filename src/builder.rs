@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Range};
+use std::borrow::Cow;
 
 use crate::{box_with_gap, panics::invalid_max_gap_size, GapText, DEFAULT_GAP_SIZE};
 
@@ -69,9 +69,9 @@ impl GapBufBuilder {
             }
 
             Cow::Borrowed(s) => {
-                let max_gap_size =
-                    self.max_gap_size
-                        .max_gap_size(self.base_gap_size, 0..0, s.len());
+                let max_gap_size = self
+                    .max_gap_size
+                    .max_gap_size(self.base_gap_size, 0, s.len());
                 let cur_base_gap = max_gap_size.min(self.base_gap_size);
                 (
                     box_with_gap!(cur_base_gap, 1, s.as_bytes()),
@@ -94,12 +94,12 @@ impl GapBufBuilder {
 pub enum MaxGapSize {
     Percentage(u8),
     Fixed(u32),
-    Func(fn(usize, Range<usize>, usize) -> usize),
+    Func(fn(usize, usize, usize) -> usize),
 }
 
 impl MaxGapSize {
     #[inline]
-    fn max_gap_size(&self, base_gap_len: usize, gap: Range<usize>, total_len: usize) -> usize {
+    fn max_gap_size(&self, base_gap_len: usize, gap: usize, total_len: usize) -> usize {
         match self {
             Self::Fixed(f) => *f as usize,
             Self::Percentage(p) => {
