@@ -44,7 +44,7 @@ macro_rules! box_with_gap {
         {
             let gap_size = $gap_size;
             let slices = [$(&$slice),*];
-            const SLICE_COUNT: usize = count_slices!($($slice,)*);
+            const SLICE_COUNT: usize = $crate::count_slices!($($slice,)*);
             let total_len = {
                 let mut i = 0;
                 let mut len = gap_size;
@@ -105,8 +105,8 @@ macro_rules! box_with_gap {
 #[macro_export]
 macro_rules! count_slices {
     () => { 0 };
-    ($odd:expr, $($a:expr, $b:expr,)*) => { (count_slices!($($a,)*) << 1) | 1 };
-    ($($a:expr, $even:expr,)*) => { count_slices!($($a,)*) << 1 };
+    ($odd:expr, $($a:expr, $b:expr,)*) => { ($crate::count_slices!($($a,)*) << 1) | 1 };
+    ($($a:expr, $even:expr,)*) => { $crate::count_slices!($($a,)*) << 1 };
 }
 
 #[inline(always)]
