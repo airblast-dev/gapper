@@ -11,7 +11,7 @@ use std::{
     ops::{Range, RangeBounds},
 };
 
-use builder::MaxGapSize;
+use builder::{GapBufBuilder, MaxGapSize};
 use panics::{invalid_offset, oob_read, position_not_on_char_boundary};
 use slice::GapSlice;
 use utils::{
@@ -58,45 +58,15 @@ impl GapText {
     where
         S: Into<Cow<'a, str>>,
     {
-        let s: Cow<'_, str> = s.into();
-        let (buf, gap) = match s {
-            Cow::Owned(s) => {
-                let mut buf_vec = s.into_bytes();
-                let vec_len = buf_vec.len();
-
-                // When an owned string is passed it is likely that it has spare capacity, we can
-                // reuse it as a gap buffer.
-                let spare = buf_vec.spare_capacity_mut();
-                let spare_len = spare.len();
-
-                // SAFETY: MaybeUninit is not copy so it does not benefit from the specialized implementation.
-                // In our case we definitely know that the values are not initialized or, are initialized
-                // with no drop code.
-                // We initialize the values and set the vec length manually for performance.
-                unsafe {
-                    spare.as_mut_ptr().write_bytes(0, spare.len());
-                    buf_vec.set_len(vec_len + spare_len);
-                }
-                (buf_vec.into_boxed_slice(), vec_len..vec_len + spare_len)
-            }
-
-            Cow::Borrowed(s) => (Box::from(s.as_bytes()), 0..0),
-        };
-
-        Self {
-            buf,
-            gap,
-            ..Default::default()
-        }
+        GapBufBuilder::new().build(s)
     }
 
     pub fn with_gap_size<'a, S>(s: S, size: usize) -> Self
     where
         S: Into<Cow<'a, str>>,
     {
-        let mut gapstr = Self::new(s);
-        gapstr.set_base_gap_size(size);
-        gapstr
+        let s: Cow<'_, str> = s.into();
+        GapBufBuilder::new().base_gap_size(size).build(s)
     }
 
     fn base_gap_size(&self) -> usize {

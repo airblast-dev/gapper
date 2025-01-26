@@ -9,17 +9,15 @@ pub struct GapBufBuilder {
 
 impl Default for GapBufBuilder {
     fn default() -> Self {
-        Self {
-            base_gap_size: DEFAULT_GAP_SIZE,
-            max_gap_size: Default::default(),
-        }
+        Self::new()
     }
 }
 
 impl GapBufBuilder {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            ..Default::default()
+            base_gap_size: DEFAULT_GAP_SIZE,
+            max_gap_size: MaxGapSize::Percentage(5)
         }
     }
 
@@ -40,7 +38,7 @@ impl GapBufBuilder {
     ///
     /// If passed a [`String`], the spare capacity of the buffer is used to initialize the gap to
     /// avoid an extra copy. If you do not expect any modifications and would rather not allocate
-    /// extra space, [`String::shrink_to_fit`] or similar methods to set a specific gap size.
+    /// extra space, [`String::shrink_to_fit`] or similar methods can be used to set a specific gap size.
     ///
     /// If passed a &[`str`], the base gap size is and compared to the max gap size. The smaller
     /// value is used to determine the initial gap size.
