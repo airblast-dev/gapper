@@ -17,7 +17,7 @@ impl GapBufBuilder {
     pub const fn new() -> Self {
         Self {
             base_gap_size: DEFAULT_GAP_SIZE,
-            max_gap_size: MaxGapSize::Percentage(5)
+            max_gap_size: MaxGapSize::Percentage(5),
         }
     }
 
@@ -38,7 +38,8 @@ impl GapBufBuilder {
     ///
     /// If passed a [`String`], the spare capacity of the buffer is used to initialize the gap to
     /// avoid an extra copy. If you do not expect any modifications and would rather not allocate
-    /// extra space, [`String::shrink_to_fit`] or similar methods can be used to set a specific gap size.
+    /// extra space, [`String::shrink_to_fit`] or similar methods can be used to set a specific gap
+    /// size before calling this method.
     ///
     /// If passed a &[`str`], the base gap size is and compared to the max gap size. The smaller
     /// value is used to determine the initial gap size.
@@ -68,7 +69,9 @@ impl GapBufBuilder {
             }
 
             Cow::Borrowed(s) => {
-                let max_gap_size = self.max_gap_size.max_gap_size(self.base_gap_size, 0..0, s.len());
+                let max_gap_size =
+                    self.max_gap_size
+                        .max_gap_size(self.base_gap_size, 0..0, s.len());
                 let cur_base_gap = max_gap_size.min(self.base_gap_size);
                 (
                     box_with_gap!(cur_base_gap, 1, s.as_bytes()),
