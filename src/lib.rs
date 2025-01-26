@@ -259,7 +259,7 @@ impl GapText {
         }
 
         let (first, mid, last, before_mid) = if self.base_gap_size() > self.gap.len() {
-            let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
+            let (first, last) = self.get_slices();
             get_parts_at(first, last, at)
         } else {
             self.move_gap_start_to(at);
@@ -297,7 +297,7 @@ impl GapText {
             self.spare_capacity_mut()[0..s.len()].copy_from_slice(s.as_bytes());
             self.gap.start += s.len();
         } else {
-            let (first, last) = (&self.buf[0..self.gap.start], &self.buf[self.gap.end..]);
+            let (first, last) = self.get_slices();
             let (first, mid, last, before_mid) = get_parts_at(first, last, at);
             let (gap_pos, s1, s2) = if before_mid {
                 (2, s.as_bytes(), mid)
@@ -362,6 +362,17 @@ impl GapText {
     #[inline(always)]
     pub fn spare_capacity_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.gap.start..self.gap.end]
+    }
+
+    /// Returns the the parts before and after the gap
+    #[inline(always)]
+    fn get_slices(&self) -> (&[u8], &[u8]) {
+        unsafe {
+            (
+                self.buf.get_unchecked(0..self.gap.start),
+                self.buf.get_unchecked(self.gap.end..),
+            )
+        }
     }
 
     #[inline(always)]
