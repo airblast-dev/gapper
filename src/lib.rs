@@ -37,12 +37,7 @@ pub struct GapText {
 
 impl Default for GapText {
     fn default() -> Self {
-        Self {
-            buf: Box::new([]),
-            gap: 0..0,
-            base_gap_size: DEFAULT_GAP_SIZE,
-            max_gap_size: MaxGapSize::default(),
-        }
+        GapBufBuilder::new().build("")
     }
 }
 
