@@ -42,7 +42,7 @@ impl GapBufBuilder {
     /// size before calling this method.
     ///
     /// If passed a &[`str`], the base gap size is and compared to the max gap size. The smaller
-    /// value is used to determine the initial gap size.
+    /// value is used as the initial gap size.
     ///
     /// In both cases the gap is guaranteed to be at the end.
     pub fn build<'a, S: Into<Cow<'a, str>>>(self, s: S) -> GapText {
