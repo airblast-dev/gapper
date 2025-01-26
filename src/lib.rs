@@ -1,3 +1,4 @@
+mod builder;
 mod panics;
 mod slice;
 mod utils;
@@ -10,6 +11,7 @@ use std::{
     ops::{Range, RangeBounds},
 };
 
+use builder::MaxGapSize;
 use panics::{invalid_offset, oob_read, position_not_on_char_boundary};
 use slice::GapSlice;
 use utils::{
@@ -30,6 +32,7 @@ pub struct GapText {
     buf: Box<[u8]>,
     gap: Range<usize>,
     base_gap_size: usize,
+    max_gap_size: MaxGapSize,
 }
 
 impl Default for GapText {
@@ -38,6 +41,7 @@ impl Default for GapText {
             buf: Box::new([]),
             gap: 0..0,
             base_gap_size: DEFAULT_GAP_SIZE,
+            max_gap_size: MaxGapSize::default(),
         }
     }
 }
