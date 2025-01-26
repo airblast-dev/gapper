@@ -1,4 +1,4 @@
-mod builder;
+pub mod builder;
 mod panics;
 mod slice;
 mod utils;
@@ -69,11 +69,13 @@ impl GapText {
         GapBufBuilder::new().base_gap_size(size).build(s)
     }
 
-    fn base_gap_size(&self) -> usize {
+    #[inline]
+    pub fn base_gap_size(&self) -> usize {
         self.base_gap_size
     }
 
-    fn set_base_gap_size(&mut self, gap_size: usize) {
+    #[inline]
+    pub fn set_base_gap_size(&mut self, gap_size: usize) {
         self.base_gap_size = gap_size;
     }
 
@@ -223,7 +225,7 @@ impl GapText {
     ///
     /// Panics if the provided position is greater than the string length ([`GapText::len`]), or
     /// the position does not lie on a char boundary.
-    fn insert_gap(&mut self, at: usize) {
+    pub fn insert_gap(&mut self, at: usize) {
         if self.len() < at {
             oob_read();
         }

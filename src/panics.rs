@@ -31,6 +31,6 @@ pub(crate) fn invalid_offset(
 #[cold]
 #[track_caller]
 #[inline(never)]
-pub(crate) const fn invlaid_max_gap_size() -> ! {
+pub(crate) const fn invalid_max_gap_size() -> ! {
     panic!("invalid max gap size");
 }

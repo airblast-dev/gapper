@@ -1,6 +1,6 @@
 use std::{borrow::Cow, ops::Range};
 
-use crate::{box_with_gap, panics::invlaid_max_gap_size, GapText, DEFAULT_GAP_SIZE};
+use crate::{box_with_gap, panics::invalid_max_gap_size, GapText, DEFAULT_GAP_SIZE};
 
 pub struct GapBufBuilder {
     base_gap_size: usize,
@@ -28,7 +28,7 @@ impl GapBufBuilder {
 
     pub const fn max_gap_size(mut self, mut max_gap_size: MaxGapSize) -> Self {
         if !max_gap_size.try_make_valid() {
-            invlaid_max_gap_size();
+            invalid_max_gap_size();
         }
         self.max_gap_size = max_gap_size;
         self
