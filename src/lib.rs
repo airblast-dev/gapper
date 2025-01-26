@@ -359,6 +359,11 @@ impl GapText {
         self.buf.len() - self.gap.len()
     }
 
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns the gap slice
     ///
     /// The returned slice may contain zeros, or content that were here before the gap was moved.
