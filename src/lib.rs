@@ -48,8 +48,8 @@ impl Default for GapText {
 
 impl Display for GapText {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let gs = self.get(..).unwrap();
-        write!(f, "{gs}")
+        let (s1, s2) = self.get_str_slices();
+        write!(f, "{s1}{s2}")
     }
 }
 
@@ -443,6 +443,14 @@ impl GapText {
                 self.buf.get_unchecked(self.gap.end..),
             )
         }
+    }
+
+    /// Returns the the parts before and after the gap as a string slice
+    #[inline(always)]
+    fn get_str_slices(&self) -> (&str, &str) {
+        let (s1, s2) = self.get_slices();
+        // SAFETY: left and right side of the gap is always guaranteed to be valid UTF-8
+        unsafe { (from_utf8_unchecked(s1), from_utf8_unchecked(s2)) }
     }
 
     #[inline(always)]
