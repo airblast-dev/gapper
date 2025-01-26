@@ -409,8 +409,7 @@ impl GapText {
     /// }
     /// ```
     pub fn grow(&mut self, by: usize) {
-        // SAFETY: the worst we can get is two empty strings since we pass (..).
-        let GapSlice(start, end) = unsafe { self.get(..).unwrap_unchecked() };
+        let (start, end) = self.get_slices();
         let gap_len = self.gap.len();
         self.buf = box_with_gap!(gap_len + by, 1, start, end);
         self.gap.end += by;
