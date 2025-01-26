@@ -327,10 +327,11 @@ impl GapText {
         if is_get_single(self.gap.start, start, end) {
             return Some(unsafe { GapSlice(from_utf8_unchecked(&self.buf[start..end]), "") });
         }
+        let (first, last) = self.get_slices();
         unsafe {
             Some(GapSlice(
-                from_utf8_unchecked(&self.buf[start..self.gap.start]),
-                from_utf8_unchecked(&self.buf[self.gap.end..end]),
+                from_utf8_unchecked(&first[start..]),
+                from_utf8_unchecked(&last[..end - self.gap.end]),
             ))
         }
     }
@@ -401,7 +402,7 @@ impl GapText {
     /// // the worst case.
     /// let mut gap_str = GapText::with_gap_size("New GapText!", 3);
     /// let slices = vec!["Hello, World!"; 10];
-    /// 
+    ///
     /// // Since our gap is smaller than the inserted slices length, this reallocates the internal
     /// // buffer on every loop.
     /// for s in slices {
