@@ -57,13 +57,13 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub const fn get_slices(&self) -> (&[T], &[T]) {
-        unsafe { (self.start.as_ref(), self.end.as_ref()) }
+    pub const fn get_slices(&self) -> [&[T]; 2] {
+        unsafe { [self.start.as_ref(), self.end.as_ref()] }
     }
 
     #[inline(always)]
-    pub const fn get_slices_mut(&mut self) -> (&mut [T], &mut [T]) {
-        unsafe { (self.start.as_mut(), self.end.as_mut()) }
+    pub const fn get_slices_mut(&mut self) -> [&mut [T]; 2] {
+        unsafe { [self.start.as_mut(), self.end.as_mut()] }
     }
 
     #[inline(always)]
@@ -132,19 +132,12 @@ impl<T> RawGapBuf<T> {
 
     #[inline(always)]
     pub const fn gap_len(&self) -> usize {
-        unsafe {
-            self.end_ptr()
-                .offset_from(self.start_ptr()) as usize
-                - self.start_len()
-        }
+        unsafe { self.end_ptr().offset_from(self.start_ptr()) as usize - self.start_len() }
     }
 
     #[inline(always)]
     pub const fn total_len(&self) -> usize {
-        unsafe {
-            (self.end_ptr().offset_from(self.start_ptr()) as usize)
-                + self.end_len()
-        }
+        unsafe { (self.end_ptr().offset_from(self.start_ptr()) as usize) + self.end_len() }
     }
 
     /// Grow the start slice by the provided value
@@ -330,7 +323,7 @@ where
         let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
         unsafe {
             let leaked = NonNull::new_unchecked(Box::leak(buf).as_mut_ptr());
-            let (start, end) = self.get_slices();
+            let [start, end] = self.get_slices();
             for (i, item) in start.iter().enumerate() {
                 leaked.add(i).write(MaybeUninit::new(item.clone()));
             }
@@ -406,7 +399,7 @@ mod tests {
     #[test]
     fn get_slice() {
         let s_buf: RawGapBuf<String> = RawGapBuf::new();
-        let (start, end) = s_buf.get_slices();
+        let [start, end] = s_buf.get_slices();
         assert!(start.is_empty());
         assert!(end.is_empty());
     }
@@ -414,7 +407,7 @@ mod tests {
     #[test]
     fn get_slice_mut() {
         let mut s_buf: RawGapBuf<String> = RawGapBuf::new();
-        let (start, end) = s_buf.get_slices_mut();
+        let [start, end] = s_buf.get_slices_mut();
         assert!(start.is_empty());
         assert!(end.is_empty());
     }
@@ -464,10 +457,7 @@ mod tests {
         );
         assert_eq!(
             s_buf.get_slices(),
-            (
-                ["Hi", "Bye"].map(String::from).as_slice(),
-                ["1", "2", "3"].map(String::from).as_slice()
-            )
+            [["Hi", "Bye"].as_slice(), ["1", "2", "3"].as_slice()]
         );
 
         assert_eq!(s_buf.gap_len(), 10);
@@ -508,50 +498,35 @@ mod tests {
         s_buf.move_gap_start_to(2);
         assert_eq!(
             s_buf.get_slices(),
-            (
-                ["1", "2"].map(String::from).as_slice(),
-                ["3", "a", "b", "c"].map(String::from).as_slice()
-            )
+            [["1", "2"].as_slice(), ["3", "a", "b", "c"].as_slice()]
         );
 
         s_buf.move_gap_start_to(4);
 
         assert_eq!(
             s_buf.get_slices(),
-            (
-                ["1", "2", "3", "a"].map(String::from).as_slice(),
-                ["b", "c"].map(String::from).as_slice()
-            )
+            [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
         );
 
         s_buf.move_gap_start_to(0);
 
         assert_eq!(
             s_buf.get_slices(),
-            (
-                [].as_slice(),
-                ["1", "2", "3", "a", "b", "c"].map(String::from).as_slice()
-            )
+            [[].as_slice(), ["1", "2", "3", "a", "b", "c"].as_slice()]
         );
 
         s_buf.move_gap_start_to(4);
 
         assert_eq!(
             s_buf.get_slices(),
-            (
-                ["1", "2", "3", "a"].map(String::from).as_slice(),
-                ["b", "c"].map(String::from).as_slice()
-            )
+            [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
         );
 
         s_buf.move_gap_start_to(1);
 
         assert_eq!(
             s_buf.get_slices(),
-            (
-                ["1"].map(String::from).as_slice(),
-                ["2", "3", "a", "b", "c"].map(String::from).as_slice()
-            )
+            [["1"].as_slice(), ["2", "3", "a", "b", "c"].as_slice()]
         );
 
         s_buf.drop_in_place();
