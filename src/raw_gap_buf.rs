@@ -528,13 +528,15 @@ mod tests {
             s_buf.get_slices(),
             [[].as_slice(), ["1", "2", "3", "a", "b", "c"].as_slice()]
         );
-        // move the gap by an amount that doesnt fit in the gap backward
+
+        // move the gap by an amount that doesnt fit in the gap forward
         s_buf.move_gap_start_to(4);
         assert_eq!(
             s_buf.get_slices(),
             [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
         );
 
+        // move the gap by an amount that doesnt fit in the gap backward
         s_buf.move_gap_start_to(1);
         assert_eq!(
             s_buf.get_slices(),
