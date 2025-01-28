@@ -25,6 +25,30 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    #[inline]
+    pub fn new_with<const S: usize, const E: usize>(
+        mut start: [T; S],
+        gap_size: usize,
+        mut end: [T; E],
+    ) -> Self {
+        let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(S + E + gap_size);
+        unsafe {
+            let leaked = NonNull::new_unchecked(Box::leak(buf_ptr).as_ptr() as *mut T);
+            leaked.copy_from_nonoverlapping(NonNull::new_unchecked(start.as_mut_ptr()), S);
+            leaked
+                .add(S + gap_size)
+                .copy_from_nonoverlapping(NonNull::new_unchecked(end.as_mut_ptr()), E);
+
+            core::mem::forget(start);
+            core::mem::forget(end);
+
+            Self {
+                start: NonNull::slice_from_raw_parts(leaked, S),
+                end: NonNull::slice_from_raw_parts(leaked.add(S + gap_size), E),
+            }
+        }
+    }
+
     #[inline(always)]
     pub const fn get_slices(&self) -> (&[T], &[T]) {
         unsafe { (self.start.as_ref(), self.end.as_ref()) }
