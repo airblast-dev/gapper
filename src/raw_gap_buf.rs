@@ -6,6 +6,13 @@ pub(crate) struct RawGapBuf<T> {
     end: NonNull<[T]>,
 }
 
+impl<T> Default for RawGapBuf<T> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // compile time assertion to ensure that RawGapBuf is null pointer optimized
 const _: () = assert!(
     core::mem::size_of::<RawGapBuf<NonZeroUsize>>()
@@ -13,7 +20,7 @@ const _: () = assert!(
 );
 
 impl<T> RawGapBuf<T> {
-    #[inline]
+    #[inline(always)]
     pub const fn new() -> Self {
         // SAFETY: ZST's are skipped during the deallocation of a Box, as such creating a dangling slice
         // pointer with a length of 0 allows us to make this function const
