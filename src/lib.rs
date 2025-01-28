@@ -1,5 +1,6 @@
 pub mod builder;
 mod panics;
+mod raw_gap_buf;
 mod slice;
 mod utils;
 
