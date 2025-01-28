@@ -116,6 +116,18 @@ impl<T> RawGapBuf<T> {
         self.end().len()
     }
 
+    /// Returns the total length of both slices
+    #[inline(always)]
+    pub const fn len(&self) -> usize {
+        self.start_len() + self.end_len()
+    }
+
+    /// Returns true if both slices are empty
+    #[inline(always)]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns a pointer to the possibly uninitialized gap
     ///
     /// This function explicity returns a pointer instead of a `&mut [T]` to allow specialized
@@ -130,11 +142,13 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    /// Returns the current gap length
     #[inline(always)]
     pub const fn gap_len(&self) -> usize {
         unsafe { self.end_ptr().offset_from(self.start_ptr()) as usize - self.start_len() }
     }
 
+    /// Returns the length of the total allocation
     #[inline(always)]
     pub const fn total_len(&self) -> usize {
         unsafe { (self.end_ptr().offset_from(self.start_ptr()) as usize) + self.end_len() }
@@ -207,6 +221,23 @@ impl<T> RawGapBuf<T> {
         );
         let t_ptr = unsafe { self.end_ptr().add(by) };
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
+    }
+
+    /// Shifts the gap by the provided value
+    ///
+    /// # Safety
+    ///
+    /// Same safety rules as shrink_*, and grow_* methods apply to this method as well.
+    #[inline(always)]
+    pub unsafe fn shift_gap(&mut self, by: isize) {
+        self.start = NonNull::slice_from_raw_parts(
+            self.start_ptr(),
+            self.start_len().saturating_add_signed(by),
+        );
+        self.end = NonNull::slice_from_raw_parts(
+            self.end_ptr().offset(by),
+            self.end_len().saturating_add_signed(-by),
+        );
     }
 
     #[inline(always)]
