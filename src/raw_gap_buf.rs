@@ -232,11 +232,11 @@ impl<T> RawGapBuf<T> {
     pub unsafe fn shift_gap(&mut self, by: isize) {
         self.start = NonNull::slice_from_raw_parts(
             self.start_ptr(),
-            self.start_len().saturating_add_signed(by),
+            unsafe { self.start_len().checked_add_signed(by).unwrap_unchecked() },
         );
         self.end = NonNull::slice_from_raw_parts(
             self.end_ptr().offset(by),
-            self.end_len().saturating_add_signed(-by),
+            unsafe { self.end_len().checked_add_signed(-by).unwrap_unchecked() },
         );
     }
 
