@@ -273,10 +273,10 @@ impl<T> RawGapBuf<T> {
             // move gap left
             if to < self.start_len() && self.start_len() - to <= gap_len {
                 copy_count = self.start_len() - to;
+                shift = -(copy_count as isize);
                 unsafe {
                     src = self.start_ptr().add(self.start_len() - copy_count);
                     dst = spare.add(gap_len - copy_count);
-                    shift = -(copy_count as isize);
                 }
             }
             // move gap right
@@ -296,8 +296,8 @@ impl<T> RawGapBuf<T> {
                 // move gap left
                 else {
                     copy_count = self.start_len() - to;
+                    shift = -(copy_count as isize);
                     unsafe {
-                        shift = -(copy_count as isize);
                         (
                             self.start_ptr().add(to),
                             self.start_ptr().add(to + gap_len),
