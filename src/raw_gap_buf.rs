@@ -1,5 +1,10 @@
 use std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
 
+/// Similar to RawVec used in the standard library, this is our inner struct
+///
+/// Internally uses a boxed slice to allocate and deallocate. Once the allocator API is stabilized
+/// this should be changed to use an allocator instead. This also removes a bunch of checks we
+/// would normally have to do as the box will deal with it upon dropping.
 pub(crate) struct RawGapBuf<T> {
     /// Using NonNull for Null pointer optimization
     start: NonNull<[T]>,
