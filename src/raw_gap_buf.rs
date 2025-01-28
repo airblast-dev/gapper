@@ -2,8 +2,8 @@ use std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
 
 pub(crate) struct RawGapBuf<T> {
     /// Using NonNull for Null pointer optimization
-    pub(crate) start: NonNull<[T]>,
-    pub(crate) end: NonNull<[T]>,
+    start: NonNull<[T]>,
+    end: NonNull<[T]>,
 }
 
 // compile time assertion to ensure that RawGapBuf is null pointer optimized
@@ -36,22 +36,22 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    const fn start_ptr(&self) -> NonNull<[T]> {
+    pub const fn start_ptr(&self) -> NonNull<[T]> {
         self.start
     }
 
     #[inline(always)]
-    const fn start_ptr_mut(&mut self) -> NonNull<[T]> {
+    pub const fn start_ptr_mut(&mut self) -> NonNull<[T]> {
         self.start
     }
 
     #[inline(always)]
-    const fn end_ptr(&self) -> NonNull<[T]> {
+    pub const fn end_ptr(&self) -> NonNull<[T]> {
         self.end
     }
 
     #[inline(always)]
-    const fn end_ptr_mut(&mut self) -> NonNull<[T]> {
+    pub const fn end_ptr_mut(&mut self) -> NonNull<[T]> {
         self.end
     }
 
@@ -93,13 +93,17 @@ impl<T> RawGapBuf<T> {
     /// Caller must ensure that the values are initialized, and that growing the start does not
     /// cause overlapping with the end.
     #[inline(always)]
-    unsafe fn grow_start(&mut self, by: usize) {
+    pub unsafe fn grow_start(&mut self, by: usize) {
         let start_len = self.start_ptr().len();
         let t_ptr = self.start.cast::<T>();
 
         // ensure extending the start does not cause an overlap with the end pointer
         debug_assert!(
-            start_len + by < self.end.cast::<T>().offset_from(self.start.cast::<T>()) as usize,
+            start_len + by
+                < self
+                    .end_ptr()
+                    .cast::<T>()
+                    .offset_from(self.start_ptr().cast::<T>()) as usize,
             "cannot grow that start value as it overlaps with the end slice"
         );
         self.start = NonNull::slice_from_raw_parts(t_ptr, start_len + by);
@@ -111,7 +115,7 @@ impl<T> RawGapBuf<T> {
     /// Caller must ensure that the values are correctly dropped, the start length >= by, and that
     /// the pointer has enough provenance.
     #[inline(always)]
-    unsafe fn shrink_start(&mut self, by: usize) {
+    pub unsafe fn shrink_start(&mut self, by: usize) {
         let start_len = self.start_ptr().len();
 
         // ensure shrinking the slice does not point out of bounds
@@ -129,7 +133,7 @@ impl<T> RawGapBuf<T> {
     /// Caller must ensure that the values before the end pointer are initialized, does not
     /// overlap with the start slice and that the pointer has enough provenance.
     #[inline(always)]
-    unsafe fn grow_end(&mut self, by: usize) {
+    pub unsafe fn grow_end(&mut self, by: usize) {
         let end_len = self.end_ptr().len();
         debug_assert!(
             self.gap_len() >= by,
@@ -145,7 +149,7 @@ impl<T> RawGapBuf<T> {
     /// Caller must ensure that the values are correctly dropped, the end length >= by, and that
     /// the pointer has enough provenance.
     #[inline(always)]
-    unsafe fn shrink_end(&mut self, by: usize) {
+    pub unsafe fn shrink_end(&mut self, by: usize) {
         let end_len = self.end_ptr().len();
 
         // ensure shrinking the slice does not point out of bounds
