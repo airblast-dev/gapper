@@ -267,57 +267,56 @@ impl<T> RawGapBuf<T> {
         let spare = self.spare_capacity_mut();
         let gap_len = spare.len();
         let spare = spare.cast::<T>();
-        // move gap left
-        if to < self.start_len() && self.start_len() - to <= gap_len {
-            let copy_count = self.start_len() - to;
-            unsafe {
-                self.start_ptr()
-                    .add(self.start_len() - copy_count)
-                    .copy_to_nonoverlapping(spare.add(gap_len - copy_count), copy_count);
-                self.shrink_start(copy_count);
-                self.grow_end(copy_count);
-            }
-        }
-        // move gap right
-        else if to > self.start_len() && to - self.start_len() <= gap_len {
-            let copy_count = to - self.start_len();
-            unsafe {
-                self.end_ptr().copy_to_nonoverlapping(spare, copy_count);
-                self.shrink_end(copy_count);
-                self.grow_start(copy_count);
-            }
-        } else {
-            // move gap right
-            let (src, dst, copy_count) = if to >= self.start_len() {
-                let copy_count = to - self.start_len();
-
-                let r = (self.end_ptr(), spare, copy_count);
-
-                unsafe {
-                    self.shrink_end(copy_count);
-                    self.grow_start(copy_count);
-                }
-
-                r
-            }
+        let shift: isize;
+        'ov: {
+            let src;
+            let dst;
+            let copy_count;
             // move gap left
-            else {
-                let copy_count = self.start_len() - to;
+            if to < self.start_len() && self.start_len() - to <= gap_len {
+                copy_count = self.start_len() - to;
                 unsafe {
-                    let r = (
-                        self.start_ptr().add(to),
-                        self.start_ptr().add(to + gap_len),
-                        copy_count,
-                    );
-                    self.shrink_start(copy_count);
-                    self.grow_end(copy_count);
-
-                    r
+                    src = self.start_ptr().add(self.start_len() - copy_count);
+                    dst = spare.add(gap_len - copy_count);
+                    shift = -(copy_count as isize);
                 }
-            };
+            }
+            // move gap right
+            else if to > self.start_len() && to - self.start_len() <= gap_len {
+                copy_count = to - self.start_len();
+                src = self.end_ptr();
+                dst = spare;
+                shift = copy_count as isize;
+            } else {
+                // move gap right
+                let (src, dst, copy_count) = if to >= self.start_len() {
+                    copy_count = to - self.start_len();
+                    shift = copy_count as isize;
 
-            unsafe { src.copy_to(dst, copy_count) };
+                    (self.end_ptr(), spare, copy_count)
+                }
+                // move gap left
+                else {
+                    copy_count = self.start_len() - to;
+                    unsafe {
+                        shift = -(copy_count as isize);
+                        (
+                            self.start_ptr().add(to),
+                            self.start_ptr().add(to + gap_len),
+                            copy_count,
+                        )
+                    }
+                };
+
+                unsafe { src.copy_to(dst, copy_count) };
+                // the copy is not non overlapping so we did it right above
+                // skip the copy call right below and just shift the gap
+                break 'ov;
+            }
+            unsafe { src.copy_to_nonoverlapping(dst, copy_count) };
         }
+
+        unsafe { self.shift_gap(shift) };
     }
 
     /// Drop's Self, calling the drop code of the stored T
