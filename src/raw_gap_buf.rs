@@ -343,6 +343,7 @@ impl<T, A> From<A> for RawGapBuf<T>
 where
     Box<[T]>: From<A>,
 {
+    #[inline]
     fn from(value: A) -> Self {
         let buf: Box<[T]> = Box::from(value);
         let val_len = buf.len();
