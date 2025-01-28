@@ -206,6 +206,71 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    fn move_gap_start_to(&mut self, to: usize) {
+        assert!(to <= self.start_ptr().len() + self.end_ptr().len());
+        if self.start_ptr().len() == to || self.gap_len() == 0 {
+            return;
+        }
+
+        let spare = self.spare_capacity_mut();
+        let gap_len = spare.len();
+        let spare = spare.cast::<MaybeUninit<T>>();
+        // move gap left
+        if to < self.start_ptr().len() && self.start_ptr().len() - to <= gap_len {
+            let copy_count = self.start_ptr().len() - to;
+            unsafe {
+                self.start_ptr()
+                    .cast::<MaybeUninit<T>>()
+                    .add(self.start_ptr().len() - copy_count)
+                    .copy_to_nonoverlapping(spare.add(copy_count), copy_count);
+                self.shrink_start(copy_count);
+                self.grow_end(copy_count);
+            }
+        }
+        // move gap right
+        else if to > self.start_ptr().len() && to - self.start_ptr().len() <= gap_len {
+            let copy_count = to - self.start_ptr().len();
+            unsafe {
+                self.end_ptr()
+                    .cast::<MaybeUninit<T>>()
+                    .copy_to_nonoverlapping(spare, copy_count);
+                self.shrink_end(copy_count);
+                self.grow_start(copy_count);
+            }
+        } else {
+            // move gap right
+            let (src, dst, copy_count) = if to >= self.start_ptr().len() {
+                let copy_count = to - self.start_ptr().len();
+
+                let r = (self.end_ptr().cast::<MaybeUninit<T>>(), spare, copy_count);
+
+                unsafe {
+                    self.shrink_end(copy_count);
+                    self.grow_start(copy_count);
+                }
+
+                r
+            }
+            // move gap left
+            else {
+                let copy_count = self.start_ptr().len() - to;
+                unsafe {
+                    let r = (
+                        self.start_ptr().cast::<MaybeUninit<T>>().add(to),
+                        self.start_ptr().cast::<MaybeUninit<T>>().add(to + gap_len),
+                        copy_count,
+                    );
+                    self.shrink_start(copy_count);
+                    self.grow_end(copy_count);
+
+                    r
+                }
+            };
+
+            unsafe { src.copy_to(dst, copy_count) };
+        }
+    }
+
     /// Drop's Self, calling the drop code of the stored T
     pub fn drop_in_place(mut self) {
         // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
@@ -402,5 +467,65 @@ mod tests {
         for i in 4..9 {
             assert_eq!(s_buf.end_with_offset(i), i + 3);
         }
+    }
+
+    #[test]
+    fn move_gap_start_to() {
+        let mut s_buf = RawGapBuf::new_with(
+            ["1", "2", "3"].map(String::from),
+            2,
+            ["a", "b", "c"].map(String::from),
+        );
+
+        s_buf.move_gap_start_to(2);
+        assert_eq!(
+            s_buf.get_slices(),
+            (
+                ["1", "2"].map(String::from).as_slice(),
+                ["3", "a", "b", "c"].map(String::from).as_slice()
+            )
+        );
+
+        s_buf.move_gap_start_to(4);
+
+        assert_eq!(
+            s_buf.get_slices(),
+            (
+                ["1", "2", "3", "a"].map(String::from).as_slice(),
+                ["b", "c"].map(String::from).as_slice()
+            )
+        );
+
+        s_buf.move_gap_start_to(0);
+
+        assert_eq!(
+            s_buf.get_slices(),
+            (
+                [].as_slice(),
+                ["1", "2", "3", "a", "b", "c"].map(String::from).as_slice()
+            )
+        );
+
+        s_buf.move_gap_start_to(4);
+
+        assert_eq!(
+            s_buf.get_slices(),
+            (
+                ["1", "2", "3", "a"].map(String::from).as_slice(),
+                ["b", "c"].map(String::from).as_slice()
+            )
+        );
+
+        s_buf.move_gap_start_to(1);
+
+        assert_eq!(
+            s_buf.get_slices(),
+            (
+                ["1"].map(String::from).as_slice(),
+                ["2", "3", "a", "b", "c"].map(String::from).as_slice()
+            )
+        );
+
+        s_buf.drop_in_place();
     }
 }
