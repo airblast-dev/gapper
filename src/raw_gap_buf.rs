@@ -148,11 +148,11 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub unsafe fn grow_start(&mut self, by: usize) {
         let start_len = self.start_len();
-        let t_ptr = self.start.cast::<T>();
+        let t_ptr = self.start_ptr();
 
         // ensure extending the start does not cause an overlap with the end pointer
         debug_assert!(
-            t_ptr.add(by) < self.end_ptr().cast::<T>(),
+            t_ptr.add(by) < self.end_ptr(),
             "cannot grow that start value as it overlaps with the end slice"
         );
         self.start = NonNull::slice_from_raw_parts(t_ptr, start_len + by);
@@ -205,7 +205,7 @@ impl<T> RawGapBuf<T> {
             end_len >= by,
             "cannot shrink start slice when shrink value is more than the total length"
         );
-        let t_ptr = unsafe { self.end.cast::<T>().add(by) };
+        let t_ptr = unsafe { self.end_ptr().add(by) };
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
     }
 
@@ -235,13 +235,12 @@ impl<T> RawGapBuf<T> {
 
         let spare = self.spare_capacity_mut();
         let gap_len = spare.len();
-        let spare = spare.cast::<MaybeUninit<T>>();
+        let spare = spare.cast::<T>();
         // move gap left
         if to < self.start_len() && self.start_len() - to <= gap_len {
             let copy_count = self.start_len() - to;
             unsafe {
                 self.start_ptr()
-                    .cast::<MaybeUninit<T>>()
                     .add(self.start_len() - copy_count)
                     .copy_to_nonoverlapping(spare.add(gap_len - copy_count), copy_count);
                 self.shrink_start(copy_count);
@@ -252,9 +251,7 @@ impl<T> RawGapBuf<T> {
         else if to > self.start_len() && to - self.start_len() <= gap_len {
             let copy_count = to - self.start_len();
             unsafe {
-                self.end_ptr()
-                    .cast::<MaybeUninit<T>>()
-                    .copy_to_nonoverlapping(spare, copy_count);
+                self.end_ptr().copy_to_nonoverlapping(spare, copy_count);
                 self.shrink_end(copy_count);
                 self.grow_start(copy_count);
             }
@@ -263,7 +260,7 @@ impl<T> RawGapBuf<T> {
             let (src, dst, copy_count) = if to >= self.start_len() {
                 let copy_count = to - self.start_len();
 
-                let r = (self.end_ptr().cast::<MaybeUninit<T>>(), spare, copy_count);
+                let r = (self.end_ptr(), spare, copy_count);
 
                 unsafe {
                     self.shrink_end(copy_count);
@@ -277,8 +274,8 @@ impl<T> RawGapBuf<T> {
                 let copy_count = self.start_len() - to;
                 unsafe {
                     let r = (
-                        self.start_ptr().cast::<MaybeUninit<T>>().add(to),
-                        self.start_ptr().cast::<MaybeUninit<T>>().add(to + gap_len),
+                        self.start_ptr().add(to),
+                        self.start_ptr().add(to + gap_len),
                         copy_count,
                     );
                     self.shrink_start(copy_count);
@@ -322,21 +319,21 @@ where
         let end_len = self.end_len();
         let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
         unsafe {
-            let leaked = NonNull::new_unchecked(Box::leak(buf).as_mut_ptr());
+            let leaked = NonNull::new_unchecked(Box::leak(buf).as_mut_ptr()).cast::<T>();
             let [start, end] = self.get_slices();
             for (i, item) in start.iter().enumerate() {
-                leaked.add(i).write(MaybeUninit::new(item.clone()));
+                leaked.add(i).write(item.clone());
             }
 
             let end_start = leaked.add(start_len + gap_len);
 
             for (i, item) in end.iter().enumerate() {
-                end_start.add(i).write(MaybeUninit::new(item.clone()));
+                end_start.add(i).write(item.clone());
             }
 
             Self {
-                start: NonNull::slice_from_raw_parts(leaked.cast::<T>(), start_len),
-                end: NonNull::slice_from_raw_parts(end_start.cast::<T>(), end_len),
+                start: NonNull::slice_from_raw_parts(leaked, start_len),
+                end: NonNull::slice_from_raw_parts(end_start, end_len),
             }
         }
     }
