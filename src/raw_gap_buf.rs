@@ -191,6 +191,24 @@ impl<T> RawGapBuf<T> {
         let t_ptr = unsafe { self.start.cast::<T>().add(by) };
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
     }
+
+    /// Drop's Self, calling the drop code of the stored T
+    pub fn drop_in_place(mut self) {
+        // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
+        // access is performed to the inner T's
+        unsafe { self.drop_t() };
+    }
+
+    /// Call the drop code for the stored T
+    ///
+    /// # Safety
+    /// Accessing any T stored in [`RawGapBuf`] after this is called is UB.
+    pub unsafe fn drop_t(&mut self) {
+        unsafe {
+            self.start.drop_in_place();
+            self.end.drop_in_place();
+        }
+    }
 }
 
 // This implementation allows us to cover every single From implementation for a boxed slice
@@ -271,16 +289,6 @@ impl<T> Drop for RawGapBuf<T> {
 mod tests {
     use super::RawGapBuf;
 
-    // to be able to run the tests (practically) with miri we need to avoid leaking any resources
-    impl<T> RawGapBuf<T> {
-        fn drop_inner(self) {
-            unsafe {
-                self.start.drop_in_place();
-                self.end.drop_in_place();
-            }
-        }
-    }
-
     #[test]
     fn new() {
         let s_buf: RawGapBuf<String> = RawGapBuf::new();
@@ -310,7 +318,7 @@ mod tests {
         assert_eq!(s_buf.gap_len(), 0);
         let s_buf: RawGapBuf<String> = RawGapBuf::from(["Hello".to_string()].as_slice());
         assert_eq!(s_buf.gap_len(), 0);
-        s_buf.drop_inner();
+        s_buf.drop_in_place();
     }
 
     #[test]
@@ -322,13 +330,13 @@ mod tests {
     #[test]
     fn from_slice() {
         let s_buf: RawGapBuf<String> = RawGapBuf::from(["Hello".to_string()].as_slice());
-        s_buf.drop_inner();
+        s_buf.drop_in_place();
     }
 
     #[test]
     fn from_box_slice() {
         let s_buf: RawGapBuf<String> = RawGapBuf::from(Box::from(["Hello".to_string()]));
-        s_buf.drop_inner();
+        s_buf.drop_in_place();
     }
 
     #[test]
@@ -336,8 +344,8 @@ mod tests {
         let s_buf: RawGapBuf<String> = RawGapBuf::from(["Hello".to_string(), "Bye".to_string()]);
         let cloned_s_buf = s_buf.clone();
         assert_eq!(s_buf.get_slices(), cloned_s_buf.get_slices());
-        s_buf.drop_inner();
-        cloned_s_buf.drop_inner();
+        s_buf.drop_in_place();
+        cloned_s_buf.drop_in_place();
     }
 
     #[test]
@@ -357,6 +365,6 @@ mod tests {
 
         assert_eq!(s_buf.gap_len(), 10);
 
-        s_buf.drop_inner();
+        s_buf.drop_in_place();
     }
 }
