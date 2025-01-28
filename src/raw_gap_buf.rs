@@ -261,7 +261,7 @@ impl<T> RawGapBuf<T> {
         }
     }
 
-    fn move_gap_start_to(&mut self, to: usize) {
+    pub fn move_gap_start_to(&mut self, to: usize) {
         assert!(to <= self.start_len() + self.end_len());
         if self.start_len() == to || self.gap_len() == 0 {
             return;
