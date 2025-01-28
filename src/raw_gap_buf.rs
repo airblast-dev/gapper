@@ -235,6 +235,12 @@ impl<T> RawGapBuf<T> {
     /// Same safety rules as shrink_*, and grow_* methods apply to this method as well.
     #[inline(always)]
     pub unsafe fn shift_gap(&mut self, by: isize) {
+        // The unwrap_unchecked use below doesn't actually matter other than changing the assembly
+        // output.
+        //
+        // Using shrink_* and grow_* wouldn't help the UB problem when incorrectly used as they
+        // would point to out of bounds. The only difference here is we are able to optimize this
+        // further with fairly similar risks.
         self.start = NonNull::slice_from_raw_parts(self.start_ptr(), unsafe {
             self.start_len().checked_add_signed(by).unwrap_unchecked()
         });
@@ -267,6 +273,10 @@ impl<T> RawGapBuf<T> {
             return;
         }
 
+        // this code is pretty ugly, but results in pretty clean assembly with relatively little
+        // branching
+        //
+        // TODO: should benchmark if this is even worth it
         let spare = self.spare_capacity_mut();
         let gap_len = spare.len();
         let spare = spare.cast::<T>();
