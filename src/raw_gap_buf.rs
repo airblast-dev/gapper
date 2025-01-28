@@ -36,23 +36,23 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    const fn start_ptr(&self) -> *const [T] {
-        self.start.as_ptr()
+    const fn start_ptr(&self) -> NonNull<[T]> {
+        self.start
     }
 
     #[inline(always)]
-    const fn start_ptr_mut(&mut self) -> *mut [T] {
-        self.start.as_ptr()
+    const fn start_ptr_mut(&mut self) -> NonNull<[T]> {
+        self.start
     }
 
     #[inline(always)]
-    const fn end_ptr(&self) -> *const [T] {
-        self.end.as_ptr()
+    const fn end_ptr(&self) -> NonNull<[T]> {
+        self.end
     }
 
     #[inline(always)]
-    const fn end_ptr_mut(&mut self) -> *mut [T] {
-        self.end.as_ptr()
+    const fn end_ptr_mut(&mut self) -> NonNull<[T]> {
+        self.end
     }
 
     /// Returns a pointer to the possibly uninitialized gap
@@ -168,9 +168,9 @@ where
         let gap_len = self.gap_len();
         let end_len = self.end_ptr().len();
         let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
-        let leaked = Box::leak(buf).as_mut_ptr();
-        let (start, end) = self.get_slices();
         unsafe {
+            let leaked = NonNull::new_unchecked(Box::leak(buf).as_mut_ptr());
+            let (start, end) = self.get_slices();
             for (i, item) in start.iter().enumerate() {
                 leaked.add(i).write(MaybeUninit::new(item.clone()));
             }
@@ -182,14 +182,8 @@ where
             }
 
             Self {
-                start: NonNull::slice_from_raw_parts(
-                    NonNull::new_unchecked(leaked as *mut T),
-                    start_len,
-                ),
-                end: NonNull::slice_from_raw_parts(
-                    NonNull::new_unchecked(end_start as *mut T),
-                    end_len,
-                ),
+                start: NonNull::slice_from_raw_parts(leaked.cast::<T>(), start_len),
+                end: NonNull::slice_from_raw_parts(end_start.cast::<T>(), end_len),
             }
         }
     }
@@ -204,17 +198,12 @@ where
         let val_len = buf.len();
 
         // The box will be dropped manually as part of RawGapBuf's drop implementation
-        let start_ptr = Box::leak(buf).as_mut_ptr();
+        let start_ptr = unsafe { NonNull::new_unchecked(Box::leak(buf).as_mut_ptr()) };
 
         unsafe {
             Self {
-                start: NonNull::new_unchecked(core::ptr::slice_from_raw_parts_mut(
-                    start_ptr, val_len,
-                )),
-                end: NonNull::new_unchecked(core::ptr::slice_from_raw_parts_mut(
-                    start_ptr.add(val_len),
-                    0,
-                )),
+                start: NonNull::slice_from_raw_parts(start_ptr, val_len),
+                end: NonNull::slice_from_raw_parts(start_ptr.add(val_len), 0),
             }
         }
     }
@@ -224,9 +213,7 @@ impl<T> Drop for RawGapBuf<T> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            let total_len = (self.end_ptr() as *const T).offset_from(self.start_ptr() as *const T)
-                as usize
-                + self.end_ptr().len();
+            let total_len = self.total_len();
 
             // only deal with the box's allocation
             // the drop code of T should be handled by a higher level type
@@ -235,12 +222,12 @@ impl<T> Drop for RawGapBuf<T> {
             // alignment and size whilst avoiding calling T's drop code.
             //
             // SAFETY: MaybeUninit is guaranteed to have the same layout as T
-            let ptr = core::ptr::slice_from_raw_parts_mut(
-                self.start_ptr_mut() as *mut MaybeUninit<T>,
+            let ptr = NonNull::slice_from_raw_parts(
+                self.start_ptr_mut().cast::<MaybeUninit<T>>(),
                 total_len,
             );
 
-            drop(Box::<[MaybeUninit<T>]>::from_raw(ptr));
+            drop(Box::<[MaybeUninit<T>]>::from_raw(ptr.as_ptr()));
         }
     }
 }
@@ -249,6 +236,7 @@ impl<T> Drop for RawGapBuf<T> {
 mod tests {
     use super::RawGapBuf;
 
+    // to be able to run the tests (practically) with miri we need to avoid leaking any resources
     impl<T> RawGapBuf<T> {
         fn drop_inner(self) {
             unsafe {
@@ -263,8 +251,6 @@ mod tests {
         let s_buf: RawGapBuf<String> = RawGapBuf::new();
         assert_eq!(s_buf.start_ptr(), s_buf.end_ptr());
         assert_eq!(s_buf.start_ptr(), s_buf.end_ptr());
-        assert!(!s_buf.start_ptr().is_null());
-        assert!(!s_buf.end_ptr().is_null());
     }
 
     #[test]
