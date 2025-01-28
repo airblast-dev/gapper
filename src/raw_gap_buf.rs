@@ -67,23 +67,53 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub const fn start_ptr(&self) -> NonNull<[T]> {
+    pub const fn start_ptr(&self) -> NonNull<T> {
+        self.start.cast()
+    }
+
+    #[inline(always)]
+    pub const fn start_ptr_mut(&mut self) -> NonNull<T> {
+        self.start.cast()
+    }
+
+    #[inline(always)]
+    pub const fn start(&self) -> NonNull<[T]> {
         self.start
     }
 
     #[inline(always)]
-    pub const fn start_ptr_mut(&mut self) -> NonNull<[T]> {
+    pub const fn start_mut(&mut self) -> NonNull<[T]> {
         self.start
     }
 
     #[inline(always)]
-    pub const fn end_ptr(&self) -> NonNull<[T]> {
+    pub const fn start_len(&self) -> usize {
+        self.start().len()
+    }
+
+    #[inline(always)]
+    pub const fn end_ptr(&self) -> NonNull<T> {
+        self.end.cast()
+    }
+
+    #[inline(always)]
+    pub const fn end_ptr_mut(&mut self) -> NonNull<T> {
+        self.end.cast()
+    }
+
+    #[inline(always)]
+    pub const fn end(&self) -> NonNull<[T]> {
         self.end
     }
 
     #[inline(always)]
-    pub const fn end_ptr_mut(&mut self) -> NonNull<[T]> {
+    pub const fn end_mut(&mut self) -> NonNull<[T]> {
         self.end
+    }
+
+    #[inline(always)]
+    pub const fn end_len(&self) -> usize {
+        self.end().len()
     }
 
     /// Returns a pointer to the possibly uninitialized gap
@@ -104,17 +134,16 @@ impl<T> RawGapBuf<T> {
     pub const fn gap_len(&self) -> usize {
         unsafe {
             self.end_ptr()
-                .cast::<T>()
-                .offset_from(self.start_ptr().cast::<T>()) as usize
-                - self.start_ptr().len()
+                .offset_from(self.start_ptr()) as usize
+                - self.start_len()
         }
     }
 
     #[inline(always)]
     pub const fn total_len(&self) -> usize {
         unsafe {
-            (self.end.cast::<T>().offset_from(self.start.cast::<T>()) as usize)
-                + self.end_ptr().len()
+            (self.end_ptr().offset_from(self.start_ptr()) as usize)
+                + self.end_len()
         }
     }
 
@@ -125,7 +154,7 @@ impl<T> RawGapBuf<T> {
     /// cause overlapping with the end.
     #[inline(always)]
     pub unsafe fn grow_start(&mut self, by: usize) {
-        let start_len = self.start_ptr().len();
+        let start_len = self.start_len();
         let t_ptr = self.start.cast::<T>();
 
         // ensure extending the start does not cause an overlap with the end pointer
@@ -143,15 +172,14 @@ impl<T> RawGapBuf<T> {
     /// the pointer has enough provenance.
     #[inline(always)]
     pub unsafe fn shrink_start(&mut self, by: usize) {
-        let start_len = self.start_ptr().len();
+        let start_len = self.start_len();
 
         // ensure shrinking the slice does not point out of bounds
         debug_assert!(
             start_len >= by,
             "cannot shrink start slice when shrink value is more than the total length"
         );
-        let t_ptr = self.start.cast::<T>();
-        self.start = NonNull::slice_from_raw_parts(t_ptr, start_len - by);
+        self.start = NonNull::slice_from_raw_parts(self.start_ptr(), start_len - by);
     }
 
     /// Grow the end slice by the provided value
@@ -161,12 +189,12 @@ impl<T> RawGapBuf<T> {
     /// overlap with the start slice and that the pointer has enough provenance.
     #[inline(always)]
     pub unsafe fn grow_end(&mut self, by: usize) {
-        let end_len = self.end_ptr().len();
+        let end_len = self.end_len();
         debug_assert!(
             self.gap_len() >= by,
             "cannot grow the end slice when the grow overlaps with the start slice"
         );
-        let t_ptr = self.end.cast::<T>().sub(by);
+        let t_ptr = self.end_ptr().sub(by);
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len + by);
     }
 
@@ -177,7 +205,7 @@ impl<T> RawGapBuf<T> {
     /// the pointer has enough provenance.
     #[inline(always)]
     pub unsafe fn shrink_end(&mut self, by: usize) {
-        let end_len = self.end_ptr().len();
+        let end_len = self.end_len();
 
         // ensure shrinking the slice does not point out of bounds
         debug_assert!(
@@ -190,7 +218,7 @@ impl<T> RawGapBuf<T> {
 
     #[inline(always)]
     pub fn start_with_offset(&self, start: usize) -> usize {
-        if start >= self.start_ptr().len() {
+        if start >= self.start_len() {
             start + self.gap_len()
         } else {
             start
@@ -199,7 +227,7 @@ impl<T> RawGapBuf<T> {
 
     #[inline(always)]
     pub fn end_with_offset(&self, end: usize) -> usize {
-        if end > self.start_ptr().len() {
+        if end > self.start_len() {
             end + self.gap_len()
         } else {
             end
@@ -207,8 +235,8 @@ impl<T> RawGapBuf<T> {
     }
 
     fn move_gap_start_to(&mut self, to: usize) {
-        assert!(to <= self.start_ptr().len() + self.end_ptr().len());
-        if self.start_ptr().len() == to || self.gap_len() == 0 {
+        assert!(to <= self.start_len() + self.end_len());
+        if self.start_len() == to || self.gap_len() == 0 {
             return;
         }
 
@@ -216,20 +244,20 @@ impl<T> RawGapBuf<T> {
         let gap_len = spare.len();
         let spare = spare.cast::<MaybeUninit<T>>();
         // move gap left
-        if to < self.start_ptr().len() && self.start_ptr().len() - to <= gap_len {
-            let copy_count = self.start_ptr().len() - to;
+        if to < self.start_len() && self.start_len() - to <= gap_len {
+            let copy_count = self.start_len() - to;
             unsafe {
                 self.start_ptr()
                     .cast::<MaybeUninit<T>>()
-                    .add(self.start_ptr().len() - copy_count)
+                    .add(self.start_len() - copy_count)
                     .copy_to_nonoverlapping(spare.add(copy_count), copy_count);
                 self.shrink_start(copy_count);
                 self.grow_end(copy_count);
             }
         }
         // move gap right
-        else if to > self.start_ptr().len() && to - self.start_ptr().len() <= gap_len {
-            let copy_count = to - self.start_ptr().len();
+        else if to > self.start_len() && to - self.start_len() <= gap_len {
+            let copy_count = to - self.start_len();
             unsafe {
                 self.end_ptr()
                     .cast::<MaybeUninit<T>>()
@@ -239,8 +267,8 @@ impl<T> RawGapBuf<T> {
             }
         } else {
             // move gap right
-            let (src, dst, copy_count) = if to >= self.start_ptr().len() {
-                let copy_count = to - self.start_ptr().len();
+            let (src, dst, copy_count) = if to >= self.start_len() {
+                let copy_count = to - self.start_len();
 
                 let r = (self.end_ptr().cast::<MaybeUninit<T>>(), spare, copy_count);
 
@@ -253,7 +281,7 @@ impl<T> RawGapBuf<T> {
             }
             // move gap left
             else {
-                let copy_count = self.start_ptr().len() - to;
+                let copy_count = self.start_len() - to;
                 unsafe {
                     let r = (
                         self.start_ptr().cast::<MaybeUninit<T>>().add(to),
@@ -296,9 +324,9 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let start_len = self.start_ptr().len();
+        let start_len = self.start_len();
         let gap_len = self.gap_len();
-        let end_len = self.end_ptr().len();
+        let end_len = self.end_len();
         let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
         unsafe {
             let leaked = NonNull::new_unchecked(Box::leak(buf).as_mut_ptr());
