@@ -33,7 +33,7 @@ impl<T> RawGapBuf<T> {
     ) -> Self {
         let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(S + E + gap_size);
         unsafe {
-            let leaked = NonNull::new_unchecked(Box::leak(buf_ptr).as_ptr() as *mut T);
+            let leaked = NonNull::new_unchecked(Box::leak(buf_ptr).as_mut_ptr().cast::<T>());
             leaked.copy_from_nonoverlapping(NonNull::new_unchecked(start.as_mut_ptr()), S);
             leaked
                 .add(S + gap_size)
@@ -331,5 +331,25 @@ mod tests {
         assert_eq!(s_buf.get_slices(), cloned_s_buf.get_slices());
         s_buf.drop_inner();
         cloned_s_buf.drop_inner();
+    }
+
+    #[test]
+    fn new_with() {
+        let s_buf = RawGapBuf::new_with(
+            ["Hi", "Bye"].map(String::from),
+            10,
+            ["1", "2", "3"].map(String::from),
+        );
+        assert_eq!(
+            s_buf.get_slices(),
+            (
+                ["Hi", "Bye"].map(String::from).as_slice(),
+                ["1", "2", "3"].map(String::from).as_slice()
+            )
+        );
+
+        assert_eq!(s_buf.gap_len(), 10);
+
+        s_buf.drop_inner();
     }
 }
