@@ -130,11 +130,7 @@ impl<T> RawGapBuf<T> {
 
         // ensure extending the start does not cause an overlap with the end pointer
         debug_assert!(
-            start_len + by
-                < self
-                    .end_ptr()
-                    .cast::<T>()
-                    .offset_from(self.start_ptr().cast::<T>()) as usize,
+            t_ptr.add(by) < self.end_ptr().cast::<T>(),
             "cannot grow that start value as it overlaps with the end slice"
         );
         self.start = NonNull::slice_from_raw_parts(t_ptr, start_len + by);
@@ -188,7 +184,7 @@ impl<T> RawGapBuf<T> {
             end_len >= by,
             "cannot shrink start slice when shrink value is more than the total length"
         );
-        let t_ptr = unsafe { self.start.cast::<T>().add(by) };
+        let t_ptr = unsafe { self.end.cast::<T>().add(by) };
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
     }
 
