@@ -192,6 +192,24 @@ impl<T> RawGapBuf<T> {
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
     }
 
+    #[inline(always)]
+    pub fn start_with_offset(&self, start: usize) -> usize {
+        if start >= self.start_ptr().len() {
+            start + self.gap_len()
+        } else {
+            start
+        }
+    }
+
+    #[inline(always)]
+    pub fn end_with_offset(&self, end: usize) -> usize {
+        if end > self.start_ptr().len() {
+            end + self.gap_len()
+        } else {
+            end
+        }
+    }
+
     /// Drop's Self, calling the drop code of the stored T
     pub fn drop_in_place(mut self) {
         // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
@@ -366,5 +384,27 @@ mod tests {
         assert_eq!(s_buf.gap_len(), 10);
 
         s_buf.drop_in_place();
+    }
+
+    #[test]
+    fn start_with_offset() {
+        let s_buf = RawGapBuf::new_with(["a", "b", "c"], 3, ["1", "2"]);
+        for i in 0..3 {
+            assert_eq!(s_buf.start_with_offset(i), i);
+        }
+        for i in 3..8 {
+            assert_eq!(s_buf.start_with_offset(i), i + 3);
+        }
+    }
+
+    #[test]
+    fn end_with_offset() {
+        let s_buf = RawGapBuf::new_with(["a", "b", "c"], 3, ["1", "2"]);
+        for i in 0..4 {
+            assert_eq!(s_buf.end_with_offset(i), i);
+        }
+        for i in 4..9 {
+            assert_eq!(s_buf.end_with_offset(i), i + 3);
+        }
     }
 }
