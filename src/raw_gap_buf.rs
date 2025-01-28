@@ -243,7 +243,7 @@ impl<T> RawGapBuf<T> {
                 self.start_ptr()
                     .cast::<MaybeUninit<T>>()
                     .add(self.start_len() - copy_count)
-                    .copy_to_nonoverlapping(spare.add(copy_count), copy_count);
+                    .copy_to_nonoverlapping(spare.add(gap_len - copy_count), copy_count);
                 self.shrink_start(copy_count);
                 self.grow_end(copy_count);
             }
@@ -495,35 +495,47 @@ mod tests {
             ["a", "b", "c"].map(String::from),
         );
 
+        // move gap to start
+        s_buf.move_gap_start_to(0);
+        assert_eq!(
+            s_buf.get_slices(),
+            [[].as_slice(), ["1", "2", "3", "a", "b", "c"].as_slice()]
+        );
+
+        // move gap to end
+        s_buf.move_gap_start_to(6);
+        assert_eq!(
+            s_buf.get_slices(),
+            [["1", "2", "3", "a", "b", "c"].as_slice(), [].as_slice()]
+        );
+
+        // move the gap by an amount that fits the gap backward
+        s_buf.move_gap_start_to(4);
+        assert_eq!(
+            s_buf.get_slices(),
+            [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
+        );
+
+        // move the gap by an amount that fits the gap forward 2x
         s_buf.move_gap_start_to(2);
         assert_eq!(
             s_buf.get_slices(),
             [["1", "2"].as_slice(), ["3", "a", "b", "c"].as_slice()]
         );
 
-        s_buf.move_gap_start_to(4);
-
-        assert_eq!(
-            s_buf.get_slices(),
-            [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
-        );
-
         s_buf.move_gap_start_to(0);
-
         assert_eq!(
             s_buf.get_slices(),
             [[].as_slice(), ["1", "2", "3", "a", "b", "c"].as_slice()]
         );
-
+        // move the gap by an amount that doesnt fit in the gap backward
         s_buf.move_gap_start_to(4);
-
         assert_eq!(
             s_buf.get_slices(),
             [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
         );
 
         s_buf.move_gap_start_to(1);
-
         assert_eq!(
             s_buf.get_slices(),
             [["1"].as_slice(), ["2", "3", "a", "b", "c"].as_slice()]
