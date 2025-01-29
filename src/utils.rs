@@ -164,11 +164,11 @@ pub(crate) fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Option<Ran
 ///
 /// If the at position is before mid/after first, returns true
 #[inline(always)]
-pub(crate) fn get_parts_at<'a>(
-    mut first: &'a [u8],
-    mut last: &'a [u8],
+pub(crate) fn get_parts_at<'a, T>(
+    mut first: &'a [T],
+    mut last: &'a [T],
     at: usize,
-) -> (&'a [u8], &'a [u8], &'a [u8], bool) {
+) -> (&'a [T], &'a [T], &'a [T], bool) {
     let (mid, before_mid) = if first.len() > at {
         let (f, mid) = first.split_at(at);
         first = f;
