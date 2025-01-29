@@ -70,6 +70,24 @@ impl GapString {
         unsafe { [from_utf8_unchecked(start), from_utf8_unchecked(end)] }
     }
 
+    /// Returns a string slice by moving the gap
+    ///
+    /// Calling this method will move the gap to the start or to the end depending on which one
+    /// would need less copies. Because of the performance implications [`GapString::get`], or
+    /// [`GapString::get_parts`] should be preferred wherever it is possible.
+    ///
+    /// If you are calling this in a common code path you should just use a [`String`], or you 
+    /// should rethink how you are approaching the problem. Calling this repeatedly mostly defeats 
+    /// the purpose of a gap buffer.
+    #[inline(always)]
+    #[allow(clippy::wrong_self_convention)]
+    pub fn to_str(&mut self) -> &str {
+        let s = self.raw.to_slice();
+
+        // SAFETY: all bytes must be valid UTF-8 which is checked when modifying the buffer
+        unsafe { from_utf8_unchecked(s) }
+    }
+
     #[inline(always)]
     pub fn is_get_char_boundary(&self, start: usize, end: usize) -> bool {
         self.raw.get(start).is_some_and(|b| u8_is_char_boundary(*b))
