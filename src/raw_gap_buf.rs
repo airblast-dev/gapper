@@ -94,6 +94,9 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    // the ptr methods are to avoid tons of casts in call sites, they are zero cost but this makes
+    // it so we don't accidentally cast to a wrong type due to inference
+
     #[inline(always)]
     pub const fn start_ptr(&self) -> NonNull<T> {
         self.start.cast()
@@ -319,6 +322,9 @@ impl<T> RawGapBuf<T> {
         let gap_len = spare.len();
         let spare = spare.cast::<T>();
         let shift: isize;
+        // a tagged scope is used to reduce the branch count
+        // the shift operation always happens, but src and dst cannot be overlapping
+        // if they are overlapping exit the scope after copying, and just shift the slices.
         'ov: {
             let src;
             let dst;
