@@ -72,6 +72,29 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
+    #[allow(clippy::wrong_self_convention)]
+    pub fn to_slice(&mut self) -> &[T] {
+        self.move_gap_out_of(0..self.len());
+        let [start, end] = self.get_slices();
+        if !start.is_empty() {
+            start
+        } else {
+            end
+        }
+    }
+
+    #[inline(always)]
+    pub fn to_slice_mut(&mut self) -> &mut [T] {
+        self.move_gap_out_of(0..self.len());
+        let [start, end] = self.get_slices_mut();
+        if !start.is_empty() {
+            start
+        } else {
+            end
+        }
+    }
+
+    #[inline(always)]
     pub const fn start_ptr(&self) -> NonNull<T> {
         self.start.cast()
     }
@@ -640,5 +663,15 @@ mod tests {
                 [].as_slice()
             ]
         );
+    }
+
+    #[test]
+    fn to_slice() {
+        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([], 0, []);
+        let s = s_buf.to_slice();
+        assert!(s.is_empty());
+        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, [4, 5, 6]);
+        let s = s_buf.to_slice();
+        assert_eq!(s, &[1, 2, 3, 4, 5, 6]);
     }
 }
