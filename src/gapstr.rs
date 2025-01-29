@@ -1,4 +1,7 @@
-use std::{ops::RangeBounds, str::from_utf8_unchecked};
+use std::{
+    ops::RangeBounds,
+    str::{from_utf8, from_utf8_unchecked},
+};
 
 use crate::{
     raw_gap_buf::RawGapBuf,
@@ -59,6 +62,8 @@ impl GapString {
         let [start, end] = self.raw.get_slice(r)?;
         // SAFETY: we return early if the positions are not on a char boundary the slices are now
         // guaranteed valid UTF-8 encoded bytes
+        debug_assert!(from_utf8(start).is_ok());
+        debug_assert!(from_utf8(end).is_ok());
         unsafe { Some([from_utf8_unchecked(start), from_utf8_unchecked(end)]) }
     }
 
@@ -67,6 +72,8 @@ impl GapString {
         let [start, end] = self.raw.get_parts();
         // SAFETY: the gap is always on a char boundary, as such the slice returned is guaranteed
         // to be valid UTF-8 encoded bytes
+        debug_assert!(from_utf8(start).is_ok());
+        debug_assert!(from_utf8(end).is_ok());
         unsafe { [from_utf8_unchecked(start), from_utf8_unchecked(end)] }
     }
 
@@ -76,8 +83,8 @@ impl GapString {
     /// would need less copies. Because of the performance implications [`GapString::get`], or
     /// [`GapString::get_parts`] should be preferred wherever it is possible.
     ///
-    /// If you are calling this in a common code path you should just use a [`String`], or you 
-    /// should rethink how you are approaching the problem. Calling this repeatedly mostly defeats 
+    /// If you are calling this in a common code path you should just use a [`String`], or you
+    /// should rethink how you are approaching the problem. Calling this repeatedly mostly defeats
     /// the purpose of a gap buffer.
     #[inline(always)]
     #[allow(clippy::wrong_self_convention)]
