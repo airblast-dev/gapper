@@ -63,7 +63,7 @@ impl GapString {
     }
 
     #[inline(always)]
-    pub const fn get_slices(&self) -> [&str; 2] {
+    pub const fn get_parts(&self) -> [&str; 2] {
         let [start, end] = self.raw.get_parts();
         // SAFETY: the gap is always on a char boundary, as such the slice returned is guaranteed
         // to be valid UTF-8 encoded bytes
@@ -85,12 +85,12 @@ mod tests {
     fn insert() {
         let mut gap_str = GapString::new();
         gap_str.insert("Hello", 0);
-        assert_eq!(gap_str.get_slices(), ["Hello", ""]);
+        assert_eq!(gap_str.get_parts(), ["Hello", ""]);
 
         gap_str.insert("Bye", 3);
-        assert_eq!(gap_str.get_slices(), ["HelBye", "lo"]);
+        assert_eq!(gap_str.get_parts(), ["HelBye", "lo"]);
 
         gap_str.insert("123", 7);
-        assert_eq!(gap_str.get_slices(), ["HelByel123", "o"]);
+        assert_eq!(gap_str.get_parts(), ["HelByel123", "o"]);
     }
 }
