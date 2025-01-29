@@ -367,7 +367,7 @@ impl<T> RawGapBuf<T> {
         // slice or box can exceed isize::MAX length (not bytes) when ZST's are stored. Even though the pointer
         // math doesn't cause problems, the unchecked addition can cause UB so we handle the edge
         // case.
-        if size_of::<T>() == 0 {
+        if Self::IS_ZST {
             return;
         }
         // The unwrap_unchecked use below doesn't actually matter other than changing the assembly
