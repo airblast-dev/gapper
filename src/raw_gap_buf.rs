@@ -207,10 +207,12 @@ impl<T> RawGapBuf<T> {
         let t_ptr = self.start_ptr();
 
         // ensure extending the start does not cause an overlap with the end pointer
-        debug_assert!(
-            t_ptr.add(by) < self.end_ptr(),
-            "cannot grow that start value as it overlaps with the end slice"
-        );
+        if !Self::IS_ZST {
+            debug_assert!(
+                t_ptr.add(by) < self.end_ptr(),
+                "cannot grow that start value as it overlaps with the end slice"
+            );
+        }
         self.start = NonNull::slice_from_raw_parts(t_ptr, start_len + by);
     }
 
@@ -239,10 +241,12 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub unsafe fn grow_end(&mut self, by: usize) {
         let end_len = self.end_len();
-        debug_assert!(
-            self.gap_len() >= by,
-            "cannot grow the end slice when the grow overlaps with the start slice"
-        );
+        if !Self::IS_ZST {
+            debug_assert!(
+                self.gap_len() >= by,
+                "cannot grow the end slice when the grow overlaps with the start slice"
+            );
+        }
         let t_ptr = self.end_ptr().sub(by);
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len + by);
     }
