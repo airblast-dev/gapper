@@ -275,6 +275,13 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    /// Move the gap start position to the provided position
+    ///
+    /// Generally [`RawGapBuf::move_gap_out_of`] should be preferred as it avoids excessive
+    /// copying.
+    ///
+    /// # Panics
+    /// Panics if the provided gap position is greater than [`RawGapBuf::len`].
     pub fn move_gap_start_to(&mut self, to: usize) {
         assert!(to <= self.len());
         if self.start_len() == to || self.gap_len() == 0 {
