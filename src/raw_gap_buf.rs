@@ -385,6 +385,12 @@ impl<T> RawGapBuf<T> {
                 // skip the copy call right below and just shift the gap
                 break 'ov;
             }
+
+            // debug assertion in case there is a logic error above
+            debug_assert!(
+                unsafe { src.offset_from(dst).unsigned_abs() >= copy_count },
+                "attempted to copy overlapping pointers"
+            );
             unsafe { src.copy_to_nonoverlapping(dst, copy_count) };
         }
 
