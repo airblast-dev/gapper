@@ -1,4 +1,4 @@
-use std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
+use std::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
 /// Similar to RawVec used in the standard library, this is our inner struct
 ///
@@ -340,6 +340,14 @@ impl<T> RawGapBuf<T> {
         unsafe { self.shift_gap(shift) };
     }
 
+    #[inline]
+    pub fn move_gap_out_of(&mut self, r: Range<usize>) {
+        // shift the gap out of the specified range whilst doing minimal amount of copying
+        let start_len = self.start_len();
+        let move_to = if start_len > r.start { r.start } else { r.end };
+        self.move_gap_start_to(move_to);
+    }
+
     /// Drop's Self, calling the drop code of the stored T
     pub fn drop_in_place(mut self) {
         // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
@@ -593,5 +601,33 @@ mod tests {
         );
 
         s_buf.drop_in_place();
+    }
+
+    #[test]
+    fn move_gap_out_of() {
+        let mut s_buf = RawGapBuf::new_with(["1", "2", "3"], 10, ["4", "5", "6", "7"]);
+        s_buf.move_gap_out_of(1..5);
+        assert_eq!(
+            s_buf.get_slices(),
+            [["1"].as_slice(), ["2", "3", "4", "5", "6", "7"].as_slice()]
+        );
+
+        s_buf.move_gap_out_of(0..s_buf.len());
+        assert_eq!(
+            s_buf.get_slices(),
+            [
+                [].as_slice(),
+                ["1", "2", "3", "4", "5", "6", "7"].as_slice()
+            ]
+        );
+
+        s_buf.move_gap_out_of(1..s_buf.len());
+        assert_eq!(
+            s_buf.get_slices(),
+            [
+                ["1", "2", "3", "4", "5", "6", "7"].as_slice(),
+                [].as_slice()
+            ]
+        );
     }
 }
