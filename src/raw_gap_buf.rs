@@ -1,5 +1,7 @@
 use std::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
+use crate::utils::is_get_single;
+
 /// Similar to RawVec used in the standard library, this is our inner struct
 ///
 /// Internally uses a boxed slice to allocate and deallocate. Once the allocator API is stabilized
@@ -120,6 +122,41 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub const fn get_parts_mut(&mut self) -> [&mut [T]; 2] {
         unsafe { [self.start.as_mut(), self.end.as_mut()] }
+    }
+
+    #[inline(always)]
+    pub fn get(&self, mut index: usize) -> Option<&T> {
+        if index >= self.len() {
+            return None;
+        }
+        index = self.start_with_offset(index);
+        unsafe { Some((self.start_ptr().add(index)).as_ref()) }
+    }
+
+    #[inline(always)]
+    pub fn get_slice(&self, r: Range<usize>) -> Option<[&[T]; 2]> {
+        let len = self.len();
+        if r.start >= len || r.end > len || r.start > r.end {
+            return None;
+        }
+
+        let (start_pos, end_pos) = (self.start_with_offset(r.start), self.end_with_offset(r.end));
+
+        if is_get_single(self.start_len(), start_pos, end_pos) {
+            let single = unsafe {
+                NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start)
+                    .as_ref()
+            };
+            return Some([single, &[]]);
+        }
+
+        let [start, end] = self.get_parts();
+        unsafe {
+            Some([
+                start.get_unchecked(r.start..),
+                end.get_unchecked(0..r.end - self.start_len()),
+            ])
+        }
     }
 
     #[inline(always)]
@@ -780,5 +817,58 @@ mod tests {
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, [4, 5, 6, 7, 8]);
         let s = s_buf.to_slice();
         assert_eq!(s, &[1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn get() {
+        let s_buf = RawGapBuf::new_with([1, 2, 3], 10, [4, 5]);
+        assert_eq!(s_buf.get(0), Some(&1));
+        assert_eq!(s_buf.get(1), Some(&2));
+        assert_eq!(s_buf.get(2), Some(&3));
+        assert_eq!(s_buf.get(3), Some(&4));
+        assert_eq!(s_buf.get(4), Some(&5));
+        assert_eq!(s_buf.get(5), None);
+        assert_eq!(s_buf.get(6), None);
+    }
+
+    #[test]
+    // this is pretty stupid as the range isn't iterated over and a user can easily construct such
+    // a range
+    //
+    // no idea why clippy is complaining about this
+    // reading the lint information, it seems a range is treated as an iterator an not a
+    // range?
+    // https://rust-lang.github.io/rust-clippy/master/index.html#reversed_empty_ranges
+    #[allow(clippy::reversed_empty_ranges)]
+    fn get_slice() {
+        let s_buf = RawGapBuf::new_with([1, 2, 3], 10, [4, 5]);
+
+        // check if all values stored are returned
+        assert_eq!(
+            s_buf.get_slice(0..s_buf.len()),
+            Some([[1, 2, 3].as_slice(), [4, 5].as_slice()]),
+        );
+        assert_eq!(s_buf.get_slice(0..s_buf.len()), Some(s_buf.get_parts()));
+
+        // get empty range
+        for i in 0..5 {
+            assert_eq!(s_buf.get_slice(i..i), Some([[].as_slice(), &[]]));
+        }
+        assert_eq!(s_buf.get_slice(5..5), None);
+        assert_eq!(s_buf.get_slice(6..6), None);
+
+        // get single item as slice
+        assert_eq!(s_buf.get_slice(3..4), Some([[4].as_slice(), &[]]));
+        assert_eq!(s_buf.get_slice(4..5), Some([[5].as_slice(), &[]]));
+        assert_eq!(s_buf.get_slice(5..6), None);
+
+        // get items across the gap
+        assert_eq!(
+            s_buf.get_slice(1..5),
+            Some([[2, 3].as_slice(), [4, 5].as_slice()])
+        );
+
+        // get items with reversed range
+        assert_eq!(s_buf.get_slice(6..4), None);
     }
 }
