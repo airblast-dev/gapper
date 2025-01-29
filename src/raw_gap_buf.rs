@@ -25,6 +25,8 @@ const _: () = assert!(
 );
 
 impl<T> RawGapBuf<T> {
+    const IS_ZST: bool = size_of::<T>() == 0;
+
     #[inline(always)]
     pub const fn new() -> Self {
         // SAFETY: ZST's are skipped during the deallocation of a Box, as such creating a dangling slice
@@ -176,12 +178,21 @@ impl<T> RawGapBuf<T> {
     /// Returns the current gap length
     #[inline(always)]
     pub const fn gap_len(&self) -> usize {
+        // with ZST's there is no gap length, as such the subtraction below can overflow
+        if Self::IS_ZST {
+            return 0;
+        }
         unsafe { self.end_ptr().offset_from(self.start_ptr()) as usize - self.start_len() }
     }
 
     /// Returns the length of the total allocation
     #[inline(always)]
     pub const fn total_len(&self) -> usize {
+        // with ZST's there is no gap length, as such the addition below can overflow
+        let len = self.len();
+        if Self::IS_ZST {
+            return len;
+        }
         unsafe { (self.end_ptr().offset_from(self.start_ptr()) as usize) + self.end_len() }
     }
 
