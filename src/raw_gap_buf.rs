@@ -235,6 +235,14 @@ impl<T> RawGapBuf<T> {
     /// Same safety rules as shrink_*, and grow_* methods apply to this method as well.
     #[inline(always)]
     pub unsafe fn shift_gap(&mut self, by: isize) {
+        // the only case where this can cause UB with correct values is when dealing with ZST's.
+        // Since a box can store up to isize::MAX bytes this isn't a problem for non ZST types but a
+        // slice or box can exceed isize::MAX length (not bytes) when ZST's are stored. Even though the pointer
+        // math doesn't cause problems, the unchecked addition can cause UB so we handle the edge
+        // case.
+        if size_of::<T>() == 0 {
+            return;
+        }
         // The unwrap_unchecked use below doesn't actually matter other than changing the assembly
         // output.
         //
