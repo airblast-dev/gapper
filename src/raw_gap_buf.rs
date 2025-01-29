@@ -284,7 +284,7 @@ impl<T> RawGapBuf<T> {
     /// Panics if the provided gap position is greater than [`RawGapBuf::len`].
     pub fn move_gap_start_to(&mut self, to: usize) {
         assert!(to <= self.len());
-        if self.start_len() == to || self.gap_len() == 0 {
+        if self.start_len() == to {
             return;
         }
 
