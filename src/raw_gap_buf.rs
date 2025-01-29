@@ -113,12 +113,12 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub const fn get_slices(&self) -> [&[T]; 2] {
+    pub const fn get_parts(&self) -> [&[T]; 2] {
         unsafe { [self.start.as_ref(), self.end.as_ref()] }
     }
 
     #[inline(always)]
-    pub const fn get_slices_mut(&mut self) -> [&mut [T]; 2] {
+    pub const fn get_parts_mut(&mut self) -> [&mut [T]; 2] {
         unsafe { [self.start.as_mut(), self.end.as_mut()] }
     }
 
@@ -126,7 +126,7 @@ impl<T> RawGapBuf<T> {
     #[allow(clippy::wrong_self_convention)]
     pub fn to_slice(&mut self) -> &[T] {
         self.move_gap_out_of(0..self.len());
-        let [start, end] = self.get_slices();
+        let [start, end] = self.get_parts();
         if !start.is_empty() {
             start
         } else {
@@ -137,7 +137,7 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub fn to_slice_mut(&mut self) -> &mut [T] {
         self.move_gap_out_of(0..self.len());
-        let [start, end] = self.get_slices_mut();
+        let [start, end] = self.get_parts_mut();
         if !start.is_empty() {
             start
         } else {
@@ -489,7 +489,7 @@ where
         let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
         let leaked = NonNull::from(Box::leak(buf)).cast::<T>();
         unsafe {
-            let [start, end] = self.get_slices();
+            let [start, end] = self.get_parts();
             for (i, item) in start.iter().enumerate() {
                 leaked.add(i).write(item.clone());
             }
@@ -564,17 +564,17 @@ mod tests {
     }
 
     #[test]
-    fn get_slice() {
+    fn get_parts() {
         let s_buf: RawGapBuf<String> = RawGapBuf::new();
-        let [start, end] = s_buf.get_slices();
+        let [start, end] = s_buf.get_parts();
         assert!(start.is_empty());
         assert!(end.is_empty());
     }
 
     #[test]
-    fn get_slice_mut() {
+    fn get_parts_mut() {
         let mut s_buf: RawGapBuf<String> = RawGapBuf::new();
-        let [start, end] = s_buf.get_slices_mut();
+        let [start, end] = s_buf.get_parts_mut();
         assert!(start.is_empty());
         assert!(end.is_empty());
     }
@@ -610,7 +610,7 @@ mod tests {
     fn clone() {
         let s_buf: RawGapBuf<String> = RawGapBuf::from(["Hello".to_string(), "Bye".to_string()]);
         let cloned_s_buf = s_buf.clone();
-        assert_eq!(s_buf.get_slices(), cloned_s_buf.get_slices());
+        assert_eq!(s_buf.get_parts(), cloned_s_buf.get_parts());
         s_buf.drop_in_place();
         cloned_s_buf.drop_in_place();
     }
@@ -623,7 +623,7 @@ mod tests {
             ["1", "2", "3"].map(String::from),
         );
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["Hi", "Bye"].as_slice(), ["1", "2", "3"].as_slice()]
         );
 
@@ -634,10 +634,17 @@ mod tests {
 
     #[test]
     fn new_with_slice() {
-        let s_buf = RawGapBuf::new_with_slice([[1, 2, 3].as_slice(), [4, 5, 6].as_slice()], 10, [[7, 8, 9].as_slice(), [10, 11, 12].as_slice()]);
+        let s_buf = RawGapBuf::new_with_slice(
+            [[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
+            10,
+            [[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
+        );
         assert_eq!(
-            s_buf.get_slices(),
-            [[1, 2, 3, 4, 5, 6].as_slice(), [7, 8, 9, 10, 11, 12].as_slice()]
+            s_buf.get_parts(),
+            [
+                [1, 2, 3, 4, 5, 6].as_slice(),
+                [7, 8, 9, 10, 11, 12].as_slice()
+            ]
         );
 
         assert_eq!(s_buf.gap_len(), 10);
@@ -676,48 +683,48 @@ mod tests {
         // move gap to start
         s_buf.move_gap_start_to(0);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [[].as_slice(), ["1", "2", "3", "a", "b", "c"].as_slice()]
         );
 
         // move gap to end
         s_buf.move_gap_start_to(6);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["1", "2", "3", "a", "b", "c"].as_slice(), [].as_slice()]
         );
 
         // move the gap by an amount that fits the gap backward
         s_buf.move_gap_start_to(4);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
         );
 
         // move the gap by an amount that fits the gap forward 2x
         s_buf.move_gap_start_to(2);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["1", "2"].as_slice(), ["3", "a", "b", "c"].as_slice()]
         );
 
         s_buf.move_gap_start_to(0);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [[].as_slice(), ["1", "2", "3", "a", "b", "c"].as_slice()]
         );
 
         // move the gap by an amount that doesnt fit in the gap forward
         s_buf.move_gap_start_to(4);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["1", "2", "3", "a"].as_slice(), ["b", "c"].as_slice()]
         );
 
         // move the gap by an amount that doesnt fit in the gap backward
         s_buf.move_gap_start_to(1);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["1"].as_slice(), ["2", "3", "a", "b", "c"].as_slice()]
         );
 
@@ -729,13 +736,13 @@ mod tests {
         let mut s_buf = RawGapBuf::new_with(["1", "2", "3"], 10, ["4", "5", "6", "7"]);
         s_buf.move_gap_out_of(1..5);
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [["1"].as_slice(), ["2", "3", "4", "5", "6", "7"].as_slice()]
         );
 
         s_buf.move_gap_out_of(0..s_buf.len());
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [
                 [].as_slice(),
                 ["1", "2", "3", "4", "5", "6", "7"].as_slice()
@@ -744,7 +751,7 @@ mod tests {
 
         s_buf.move_gap_out_of(1..s_buf.len());
         assert_eq!(
-            s_buf.get_slices(),
+            s_buf.get_parts(),
             [
                 ["1", "2", "3", "4", "5", "6", "7"].as_slice(),
                 [].as_slice()
