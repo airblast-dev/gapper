@@ -670,8 +670,21 @@ mod tests {
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([], 0, []);
         let s = s_buf.to_slice();
         assert!(s.is_empty());
-        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, [4, 5, 6]);
+
+        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 0, [4, 5, 6]);
         let s = s_buf.to_slice();
         assert_eq!(s, &[1, 2, 3, 4, 5, 6]);
+
+        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, []);
+        let s = s_buf.to_slice();
+        assert_eq!(s, &[1, 2, 3]);
+
+        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([], 1, [1, 2, 3]);
+        let s = s_buf.to_slice();
+        assert_eq!(s, &[1, 2, 3]);
+
+        let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, [4, 5, 6, 7, 8]);
+        let s = s_buf.to_slice();
+        assert_eq!(s, &[1, 2, 3, 4, 5, 6, 7, 8]);
     }
 }
