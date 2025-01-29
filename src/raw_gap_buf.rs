@@ -44,12 +44,12 @@ impl<T> RawGapBuf<T> {
         mut end: [T; E],
     ) -> Self {
         let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(S + E + gap_size);
+        let leaked = NonNull::from(Box::leak(buf_ptr)).cast::<T>();
         unsafe {
-            let leaked = NonNull::new_unchecked(Box::leak(buf_ptr).as_mut_ptr().cast::<T>());
-            leaked.copy_from_nonoverlapping(NonNull::new_unchecked(start.as_mut_ptr()), S);
+            leaked.copy_from_nonoverlapping(NonNull::from(&mut start).cast::<T>(), S);
             leaked
                 .add(S + gap_size)
-                .copy_from_nonoverlapping(NonNull::new_unchecked(end.as_mut_ptr()), E);
+                .copy_from_nonoverlapping(NonNull::from(&mut end).cast::<T>(), E);
 
             core::mem::forget(start);
             core::mem::forget(end);
@@ -351,7 +351,7 @@ impl<T> RawGapBuf<T> {
     ///
     /// Determines the position to move the gap whilst moving it out of the range, and doing
     /// minimal copies.
-    #[inline]
+    #[inline(always)]
     pub fn move_gap_out_of(&mut self, r: Range<usize>) {
         // shift the gap out of the specified range whilst doing minimal amount of copying
         let start_len = self.start_len();
@@ -388,8 +388,8 @@ where
         let gap_len = self.gap_len();
         let end_len = self.end_len();
         let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
+        let leaked = NonNull::from(Box::leak(buf)).cast::<T>();
         unsafe {
-            let leaked = NonNull::new_unchecked(Box::leak(buf).as_mut_ptr()).cast::<T>();
             let [start, end] = self.get_slices();
             for (i, item) in start.iter().enumerate() {
                 leaked.add(i).write(item.clone());
@@ -419,7 +419,7 @@ where
         let val_len = buf.len();
 
         // The box will be dropped manually as part of RawGapBuf's drop implementation
-        let start_ptr = unsafe { NonNull::new_unchecked(Box::leak(buf).as_mut_ptr()) };
+        let start_ptr = NonNull::from(Box::leak(buf)).cast::<T>();
 
         unsafe {
             Self {
