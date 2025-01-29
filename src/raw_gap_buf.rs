@@ -340,6 +340,10 @@ impl<T> RawGapBuf<T> {
         unsafe { self.shift_gap(shift) };
     }
 
+    /// Move the gap out of a range
+    ///
+    /// Determines the position to move the gap whilst moving it out of the range, and doing
+    /// minimal copies.
     #[inline]
     pub fn move_gap_out_of(&mut self, r: Range<usize>) {
         // shift the gap out of the specified range whilst doing minimal amount of copying
