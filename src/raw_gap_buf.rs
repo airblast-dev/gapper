@@ -63,6 +63,55 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    #[inline]
+    pub fn new_with_slice<const S: usize, const E: usize>(
+        start: [&[T]; S],
+        gap_size: usize,
+        end: [&[T]; E],
+    ) -> Self
+    where
+        T: Copy,
+    {
+        let start_len = start.iter().map(|s| s.len()).sum();
+        let end_len = end.iter().map(|s| s.len()).sum();
+        let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_size + end_len);
+        let leaked = NonNull::from(Box::leak(buf_ptr)).cast::<T>();
+
+        let mut i = 0;
+        let mut offset = 0;
+
+        while i < S {
+            let i_len = start[i].len();
+            unsafe {
+                leaked
+                    .add(offset)
+                    .copy_from_nonoverlapping(NonNull::from(start[i]).cast::<T>(), i_len)
+            };
+            i += 1;
+            offset += i_len;
+        }
+
+        offset += gap_size;
+
+        i = 0;
+        while i < E {
+            let i_len = end[i].len();
+            unsafe {
+                leaked
+                    .add(offset)
+                    .copy_from_nonoverlapping(NonNull::from(end[i]).cast::<T>(), i_len)
+            };
+            i += 1;
+            offset += i_len;
+        }
+        Self {
+            start: NonNull::slice_from_raw_parts(leaked, start_len),
+            end: unsafe {
+                NonNull::slice_from_raw_parts(leaked.add(start_len + gap_size), end_len)
+            },
+        }
+    }
+
     #[inline(always)]
     pub const fn get_slices(&self) -> [&[T]; 2] {
         unsafe { [self.start.as_ref(), self.end.as_ref()] }
@@ -581,6 +630,17 @@ mod tests {
         assert_eq!(s_buf.gap_len(), 10);
 
         s_buf.drop_in_place();
+    }
+
+    #[test]
+    fn new_with_slice() {
+        let s_buf = RawGapBuf::new_with_slice([[1, 2, 3].as_slice(), [4, 5, 6].as_slice()], 10, [[7, 8, 9].as_slice(), [10, 11, 12].as_slice()]);
+        assert_eq!(
+            s_buf.get_slices(),
+            [[1, 2, 3, 4, 5, 6].as_slice(), [7, 8, 9, 10, 11, 12].as_slice()]
+        );
+
+        assert_eq!(s_buf.gap_len(), 10);
     }
 
     #[test]
