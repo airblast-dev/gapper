@@ -489,6 +489,7 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub fn move_gap_out_of(&mut self, r: Range<usize>) {
         // shift the gap out of the specified range whilst doing minimal amount of copying
+        // TODO: optimize
         let start_len = self.start_len();
         let move_to = if start_len > r.start { r.start } else { r.end };
         self.move_gap_start_to(move_to);

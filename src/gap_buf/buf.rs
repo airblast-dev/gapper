@@ -63,6 +63,17 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.get_range(r)
     }
 
+    /// Get a slice of the values in the range
+    ///
+    /// If the provided range is not out of bounds, returns two slices of T.
+    /// The first one being before the gap, and the second one being after the gap.
+    ///
+    /// If a single slice is needed [`GrowingGapBuf::to_slice`] can be used.
+    #[inline(always)]
+    pub fn get_slice<RB: RangeBounds<usize>>(&self, r: RB) -> Option<&[T]> {
+        // TODO: redo move_gap_out_of
+    }
+
     /// Shift's the T's to one side and returns a slice of T's
     ///
     /// Calling this method isn't recommended as it requires shifting all of the elements to the
