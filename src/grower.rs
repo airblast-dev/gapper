@@ -38,12 +38,22 @@ pub(crate) mod test_utils {
     #[derive(Clone, Copy, Debug, Default)]
     pub(crate) struct TinyGrower;
 
-    impl<T: ?Sized> Grower<T> for TinyGrower {
-        fn base_gap_size(&mut self, _: &T, _: &T) -> usize {
+    impl<T> Grower<[T]> for TinyGrower {
+        fn base_gap_size(&mut self, _: &[T], _: &[T]) -> usize {
             1
         }
 
-        fn max_gap_size(&mut self, _: &T, _: &T) -> usize {
+        fn max_gap_size(&mut self, _: &[T], _: &[T]) -> usize {
+            1
+        }
+    }
+
+    impl Grower<str> for TinyGrower {
+        fn base_gap_size(&mut self, _: &str, _: &str) -> usize {
+            1
+        }
+
+        fn max_gap_size(&mut self, _: &str, _: &str) -> usize {
             1
         }
     }
@@ -51,12 +61,22 @@ pub(crate) mod test_utils {
     #[derive(Clone, Copy, Debug, Default)]
     pub(crate) struct FuzzyGrower;
 
-    impl<T: ?Sized> Grower<T> for FuzzyGrower {
-        fn base_gap_size(&mut self, _: &T, _: &T) -> usize {
+    impl<T> Grower<[T]> for FuzzyGrower {
+        fn base_gap_size(&mut self, _: &[T], _: &[T]) -> usize {
             rand::random::<u8>() as usize
         }
 
-        fn max_gap_size(&mut self, _: &T, _: &T) -> usize {
+        fn max_gap_size(&mut self, _: &[T], _: &[T]) -> usize {
+            rand::random::<u8>() as usize
+        }
+    }
+
+    impl Grower<str> for FuzzyGrower {
+        fn base_gap_size(&mut self, _: &str, _: &str) -> usize {
+            rand::random::<u8>() as usize
+        }
+
+        fn max_gap_size(&mut self, _: &str, _: &str) -> usize {
             rand::random::<u8>() as usize
         }
     }
