@@ -35,9 +35,13 @@ impl GapString {
             let (start, mid, end, before_mid) = get_parts_at(start, end, at);
             let new_raw = if before_mid {
                 // TODO: use realloc methods like on GrowingGapBuf
-                unsafe { RawGapBuf::new_with_slice(&[start, s_bytes], DEFAULT_GAP_SIZE, &[mid, end]) }
+                unsafe {
+                    RawGapBuf::new_with_slice(&[start, s_bytes], DEFAULT_GAP_SIZE, &[mid, end])
+                }
             } else {
-                unsafe { RawGapBuf::new_with_slice(&[start, mid, s_bytes], DEFAULT_GAP_SIZE, &[end]) }
+                unsafe {
+                    RawGapBuf::new_with_slice(&[start, mid, s_bytes], DEFAULT_GAP_SIZE, &[end])
+                }
             };
             self.raw = new_raw;
             return;

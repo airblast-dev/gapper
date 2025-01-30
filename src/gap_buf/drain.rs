@@ -58,8 +58,9 @@ impl<T> Iterator for Drain<'_, T> {
     }
 
     fn count(mut self) -> usize
-        where
-            Self: Sized, {
+    where
+        Self: Sized,
+    {
         let len = self.ptr.len();
         // drop the items and set the length as the count method should exhaust all items
         // we also have to leave the fields in valid state in case [`Iterator::by_ref`] or

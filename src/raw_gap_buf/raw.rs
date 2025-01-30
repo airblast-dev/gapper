@@ -72,11 +72,7 @@ impl<T> RawGapBuf<T> {
     /// # Safety
     /// Calling source T's drop code is UB.
     #[inline]
-    pub unsafe fn new_with_slice(
-        start: &[&[T]],
-        gap_size: usize,
-        end: &[&[T]],
-    ) -> Self {
+    pub unsafe fn new_with_slice(start: &[&[T]], gap_size: usize, end: &[&[T]]) -> Self {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
         let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_size + end_len);
