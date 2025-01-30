@@ -1,6 +1,10 @@
 use std::{marker::PhantomData, ops::RangeBounds, ptr::NonNull};
 
-use crate::{grower::Grower, raw_gap_buf::RawGapBuf, utils::get_range};
+use crate::{
+    grower::Grower,
+    raw_gap_buf::RawGapBuf,
+    utils::{get_parts_at, get_range},
+};
 
 use super::drain::Drain;
 
@@ -86,7 +90,27 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     pub(crate) fn realloc(&mut self, gap_size: usize) {
         let [start, end] = self.raw.get_parts();
-        let new = unsafe { RawGapBuf::new_with_slice([start], gap_size, [end]) };
+        let new = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
+        drop(core::mem::replace(&mut self.raw, new));
+    }
+
+    pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
+        let [start, end] = self.raw.get_parts();
+        let temp;
+        let temp2;
+        let (left, right) = {
+            let (start, mid, end, before_mid) = get_parts_at(start, end, at);
+            if before_mid {
+                temp2 = [mid, end];
+                temp = [start];
+                (temp.as_slice(), temp2.as_slice())
+            } else {
+                temp2 = [start, mid];
+                temp = [end];
+                (temp2.as_slice(), temp.as_slice())
+            }
+        };
+        let new = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
         drop(core::mem::replace(&mut self.raw, new));
     }
 }

@@ -72,10 +72,10 @@ impl<T> RawGapBuf<T> {
     /// # Safety
     /// Calling T's drop code is UB.
     #[inline]
-    pub unsafe fn new_with_slice<const S: usize, const E: usize>(
-        start: [&[T]; S],
+    pub unsafe fn new_with_slice(
+        start: &[&[T]],
         gap_size: usize,
-        end: [&[T]; E],
+        end: &[&[T]],
     ) -> Self {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
@@ -85,7 +85,7 @@ impl<T> RawGapBuf<T> {
         let mut i = 0;
         let mut offset = 0;
 
-        while i < S {
+        while i < start.len() {
             let i_len = start[i].len();
             unsafe {
                 leaked
@@ -99,7 +99,7 @@ impl<T> RawGapBuf<T> {
         offset += gap_size;
 
         i = 0;
-        while i < E {
+        while i < end.len() {
             let i_len = end[i].len();
             unsafe {
                 leaked
@@ -676,9 +676,9 @@ mod tests {
     fn new_with_slice() {
         let s_buf = unsafe {
             RawGapBuf::new_with_slice(
-                [[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
+                &[[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
                 10,
-                [[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
+                &[[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
             )
         };
         assert_eq!(
