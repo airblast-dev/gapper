@@ -133,7 +133,7 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub fn get_slice(&self, r: Range<usize>) -> Option<[&[T]; 2]> {
+    pub fn get_range(&self, r: Range<usize>) -> Option<[&[T]; 2]> {
         let len = self.len();
         if r.start >= len || r.end > len || r.start > r.end {
             return None;
@@ -846,30 +846,30 @@ mod tests {
 
         // check if all values stored are returned
         assert_eq!(
-            s_buf.get_slice(0..s_buf.len()),
+            s_buf.get_range(0..s_buf.len()),
             Some([[1, 2, 3].as_slice(), [4, 5].as_slice()]),
         );
-        assert_eq!(s_buf.get_slice(0..s_buf.len()), Some(s_buf.get_parts()));
+        assert_eq!(s_buf.get_range(0..s_buf.len()), Some(s_buf.get_parts()));
 
         // get empty range
         for i in 0..5 {
-            assert_eq!(s_buf.get_slice(i..i), Some([[].as_slice(), &[]]));
+            assert_eq!(s_buf.get_range(i..i), Some([[].as_slice(), &[]]));
         }
-        assert_eq!(s_buf.get_slice(5..5), None);
-        assert_eq!(s_buf.get_slice(6..6), None);
+        assert_eq!(s_buf.get_range(5..5), None);
+        assert_eq!(s_buf.get_range(6..6), None);
 
         // get single item as slice
-        assert_eq!(s_buf.get_slice(3..4), Some([[4].as_slice(), &[]]));
-        assert_eq!(s_buf.get_slice(4..5), Some([[5].as_slice(), &[]]));
-        assert_eq!(s_buf.get_slice(5..6), None);
+        assert_eq!(s_buf.get_range(3..4), Some([[4].as_slice(), &[]]));
+        assert_eq!(s_buf.get_range(4..5), Some([[5].as_slice(), &[]]));
+        assert_eq!(s_buf.get_range(5..6), None);
 
         // get items across the gap
         assert_eq!(
-            s_buf.get_slice(1..5),
+            s_buf.get_range(1..5),
             Some([[2, 3].as_slice(), [4, 5].as_slice()])
         );
 
         // get items with reversed range
-        assert_eq!(s_buf.get_slice(6..4), None);
+        assert_eq!(s_buf.get_range(6..4), None);
     }
 }

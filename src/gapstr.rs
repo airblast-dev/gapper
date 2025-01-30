@@ -64,7 +64,7 @@ impl GapString {
             return None;
         }
 
-        let [start, end] = self.raw.get_slice(r)?;
+        let [start, end] = self.raw.get_range(r)?;
         // SAFETY: we return early if the positions are not on a char boundary the slices are now
         // guaranteed valid UTF-8 encoded bytes
         debug_assert!(from_utf8(start).is_ok());

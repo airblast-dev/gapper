@@ -15,6 +15,7 @@ struct GrowingGapBuf<T, G: Grower<[T]>> {
 }
 
 impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
+    /// Initialize an empty gap buffer
     #[inline(always)]
     pub fn new() -> GrowingGapBuf<T, G>
     where
@@ -26,6 +27,11 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         }
     }
 
+    /// Initialize a gap buffer with the provided grower
+    ///
+    /// Depending on the type and use case you may prefer a different strategy when growing
+    /// or shrinking the gap buffer. This allows you to provide your own [`Grower`] to limit how
+    /// much extra capacity can be allocated.
     #[inline(always)]
     pub fn with_grower(grower: G) -> Self {
         Self {
@@ -34,28 +40,48 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         }
     }
 
+    /// Get the value at the provided index
+    ///
+    /// This will account for the gap so you must provide the index as if you were indexing into a
+    /// normal slice.
+    ///
+    /// Returns None if index is out of bounds.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<&T> {
         self.raw.get(index)
     }
 
+    /// Get a slice of the values in the range
+    ///
+    /// If the provided range is not out of bounds, returns two slices of T.
+    /// The first one being before the gap, and the second one being after the gap.
+    ///
+    /// If a single slice is needed [`GrowingGapBuf::to_slice`] can be used.
     #[inline(always)]
-    pub fn get_slice<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&[T]; 2]> {
+    pub fn get_range<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&[T]; 2]> {
         let r = get_range(self.raw.len(), r)?;
-        self.raw.get_slice(r)
+        self.raw.get_range(r)
     }
 
+    /// Shift's the T's to one side and returns a slice of T's
+    ///
+    /// Calling this method isn't recommended as it requires shifting all of the elements to the
+    /// end or start of the buffer. Prefer [`GrowingGapBuf::get_range`] whenever possible.
     #[inline(always)]
     #[allow(clippy::wrong_self_convention)]
     pub fn to_slice(&mut self) -> &[T] {
         self.raw.to_slice()
     }
 
+    /// Same as [`GrowingGapBuf::to_slice`] but returns a mutable slice
     #[inline(always)]
     pub fn to_slice_mut(&mut self) -> &mut [T] {
         self.raw.to_slice_mut()
     }
 
+    /// Insert T at the provided position
+    ///
+    /// # Panics if the provided position is out of bounds.
     #[inline]
     pub fn insert(&mut self, at: usize, val: T) {
         assert!(self.raw.get(at).is_some() || self.raw.len() == at);
@@ -75,6 +101,13 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         }
     }
 
+    /// Drains the provided range from the gap buffer
+    ///
+    /// If the provided ranges are out of bounds returns None.
+    /// The drain is an [`Iterator`] of owned T's. Usage wise this is the same as [`Vec::drain`]
+    /// except for gap buffers.
+    ///
+    /// See [`Drain`] for its available methods.
     #[inline(always)]
     pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<Drain<'_, T>> {
         let r = get_range(self.raw.len(), r)?;
@@ -119,7 +152,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// specific posiiton and copy the value over.
     ///
     /// Instead of that, this method makes the "move the gap" step a part of the copying step.
-    /// Rather than shifting around T's we just allocate accounting for the requested position
+    /// Rather than shifting around T's we just copy the bytes accounting for the requested gap position
     /// meaning element shifting isn't performed.
     pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
         let [start, end] = self.raw.get_parts();
