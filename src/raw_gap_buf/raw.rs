@@ -298,7 +298,7 @@ impl<T> RawGapBuf<T> {
         // ensure extending the start does not cause an overlap with the end pointer
         if !Self::IS_ZST {
             debug_assert!(
-                t_ptr.add(by) < self.end_ptr(),
+                t_ptr.add(start_len + by) <= self.end_ptr(),
                 "cannot grow that start value as it overlaps with the end slice"
             );
         }
