@@ -65,15 +65,18 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    /// Initialize a [`RawGapBuf`] by byte copying from the source.
+    ///
+    /// Useful when reallocating the buffer.
+    ///
+    /// # Safety
+    /// Calling T's drop code is UB.
     #[inline]
-    pub fn new_with_slice<const S: usize, const E: usize>(
+    pub unsafe fn new_with_slice<const S: usize, const E: usize>(
         start: [&[T]; S],
         gap_size: usize,
         end: [&[T]; E],
-    ) -> Self
-    where
-        T: Copy,
-    {
+    ) -> Self {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
         let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_size + end_len);
@@ -671,11 +674,13 @@ mod tests {
 
     #[test]
     fn new_with_slice() {
-        let s_buf = RawGapBuf::new_with_slice(
-            [[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
-            10,
-            [[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
-        );
+        let s_buf = unsafe {
+            RawGapBuf::new_with_slice(
+                [[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
+                10,
+                [[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
+            )
+        };
         assert_eq!(
             s_buf.get_parts(),
             [

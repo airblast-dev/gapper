@@ -1,11 +1,12 @@
 use std::{iter::FusedIterator, marker::PhantomData, ptr::NonNull};
 
+#[derive(Debug)]
 pub struct Drain<'a, T> {
     // The value lives as long as 'a, but we are able to safely mutate the values as it is now
     // added to the gap. As long as the gap buffer this originated from is not mutated this is safe
     // to use in any way.
-    ptr: NonNull<[T]>,
-    __p: PhantomData<&'a T>,
+    pub(crate) ptr: NonNull<[T]>,
+    pub(crate) __p: PhantomData<&'a T>,
 }
 
 impl<T> Drain<'_, T> {
@@ -89,3 +90,5 @@ impl<T> Drop for Drain<'_, T> {
         }
     }
 }
+
+// see buf.rs module for drain tests

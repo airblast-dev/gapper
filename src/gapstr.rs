@@ -34,9 +34,9 @@ impl GapString {
             let [start, end] = self.raw.get_parts();
             let (start, mid, end, before_mid) = get_parts_at(start, end, at);
             let new_raw = if before_mid {
-                RawGapBuf::new_with_slice([start, s_bytes], DEFAULT_GAP_SIZE, [mid, end])
+                unsafe { RawGapBuf::new_with_slice([start, s_bytes], DEFAULT_GAP_SIZE, [mid, end]) }
             } else {
-                RawGapBuf::new_with_slice([start, mid, s_bytes], DEFAULT_GAP_SIZE, [end])
+                unsafe { RawGapBuf::new_with_slice([start, mid, s_bytes], DEFAULT_GAP_SIZE, [end]) }
             };
             self.raw = new_raw;
             return;
