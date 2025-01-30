@@ -99,6 +99,13 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         ret
     }
 
+    /// Reallocate the buffer with the provided gap size
+    ///
+    /// Generally [`GrowingGapBuf::realloc_gap_at`] should be preferred instead as in most cases of
+    /// reallocation, the goal is to allocate enough space to before an insertion is performed.
+    ///
+    /// This is allows growing or shrinking the gap without any knowledge of the insertions size
+    /// (such as an iterator of T's).
     pub(crate) fn realloc(&mut self, gap_size: usize) {
         let [start, end] = self.raw.get_parts();
         // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
@@ -106,6 +113,14 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
     }
 
+    /// Reallocate the buffer and position the gap start at the provided position
+    ///
+    /// When performing an insertion we reserve enough space for the insertion, move the gap to a
+    /// specific posiiton and copy the value over.
+    ///
+    /// Instead of that, this method makes the "move the gap" step a part of the copying step.
+    /// Rather than shifting around T's we just allocate accounting for the requested position
+    /// meaning element shifting isn't performed.
     pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
         let [start, end] = self.raw.get_parts();
         let temp;
