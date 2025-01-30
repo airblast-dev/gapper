@@ -29,7 +29,11 @@ impl<T> Iterator for Drain<'_, T> {
             return None;
         }
         let ptr = self.ptr.cast::<T>();
+        // SAFETY: we have checked the remaining length above
+        // it is now guaranteed that we at least have one value stored
         let t = unsafe { ptr.read() };
+        // SAFETY: we have read the last value in the slice, to avoid a double drop we shrink the
+        // length of our slice
         self.ptr = NonNull::slice_from_raw_parts(unsafe { ptr.add(1) }, len - 1);
         Some(t)
     }
@@ -40,6 +44,11 @@ impl<T> Iterator for Drain<'_, T> {
     {
         let len = self.ptr.len();
         if n >= len {
+            // we must exhaust all of the items and to not return any T's in other calls we
+            // call the drop code and set the slice length to 0
+            // SAFETY: since T's will never be accessed after this point it is safe to call its drop code
+            unsafe { self.ptr.drop_in_place() };
+            self.ptr = NonNull::slice_from_raw_parts(self.ptr.cast::<T>(), 0);
             return None;
         }
         let ptr = self.ptr.cast::<T>();
@@ -67,6 +76,7 @@ impl<T> Iterator for Drain<'_, T> {
         // similar methods are used
         //
         // same as calling [`Iterator::next`] until None is returned
+        // SAFETY: since T's will never be accessed after this point it is safe to call its drop code
         unsafe { self.ptr.drop_in_place() };
         self.ptr = NonNull::slice_from_raw_parts(self.ptr.cast::<T>(), 0);
         len
@@ -82,6 +92,10 @@ impl<T> Iterator for Drain<'_, T> {
         }
 
         let ptr = self.ptr.cast::<T>();
+        // SAFETY: we have checked if the length is 0 and we decrement the length without any
+        // wrapping
+        // we can't have a double drop as the value is returned to the user with its own drop code
+        // at the end of the function
         let t = unsafe { ptr.add(len - 1).read() };
         self.ptr = NonNull::slice_from_raw_parts(ptr, 0);
 

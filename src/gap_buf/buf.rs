@@ -101,6 +101,8 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     pub(crate) fn realloc(&mut self, gap_size: usize) {
         let [start, end] = self.raw.get_parts();
+        // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
+        // are dropping the previous buffer to avoid accidental access or drop code being called
         self.raw = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
     }
 
