@@ -42,9 +42,17 @@ impl<T> Iterator for Drain<'_, T> {
         if n >= len {
             return None;
         }
-        n += 1;
         let ptr = self.ptr.cast::<T>();
-        let t = unsafe { ptr.read() };
+
+        // go to the requested value and read it
+        let t = unsafe { ptr.add(n).read() };
+        // drop all values until the one that was read
+        unsafe { NonNull::slice_from_raw_parts(ptr, n).drop_in_place() };
+
+        // we minimally always drop one value in this branch
+        // to account for the item that was read, and the ones that were dropped readjust the slice
+        // start and length
+        n += 1;
         self.ptr = NonNull::slice_from_raw_parts(unsafe { ptr.add(n) }, len - n);
         Some(t)
     }
