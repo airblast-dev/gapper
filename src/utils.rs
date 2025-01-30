@@ -36,7 +36,7 @@ pub(crate) fn box_with_gap(b1: &[u8], gap_len: usize, b2: &[u8]) -> Box<[u8]> {
 ///
 /// The reasons this macro is faster is thanks to [`core::ptr::write_bytes`], and a bunch of panic
 /// checks being removed. In godbolt the total assembly was halfed with more than half of the branches being
-/// removed compared to the iterator solution. 
+/// removed compared to the iterator solution.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! box_with_gap {
