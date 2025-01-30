@@ -63,7 +63,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
             let [start, end] = self.raw.get_parts();
             let base = self.grower.base_gap_size(start, end);
             let max = self.grower.max_gap_size(start, end);
-            self.realloc(base.min(max) + 1);
+            self.realloc_gap_at(base.min(max) + 1, at);
         }
         self.raw.move_gap_start_to(at);
         unsafe {

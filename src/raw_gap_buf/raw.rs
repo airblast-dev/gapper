@@ -70,7 +70,7 @@ impl<T> RawGapBuf<T> {
     /// Useful when reallocating the buffer.
     ///
     /// # Safety
-    /// Calling T's drop code is UB.
+    /// Calling source T's drop code is UB.
     #[inline]
     pub unsafe fn new_with_slice(
         start: &[&[T]],
