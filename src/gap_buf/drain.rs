@@ -83,7 +83,7 @@ impl<T> Iterator for Drain<'_, T> {
 
         let ptr = self.ptr.cast::<T>();
         let t = unsafe { ptr.add(len - 1).read() };
-        self.ptr = NonNull::slice_from_raw_parts(ptr, len - 1);
+        self.ptr = NonNull::slice_from_raw_parts(ptr, 0);
 
         Some(t)
     }
