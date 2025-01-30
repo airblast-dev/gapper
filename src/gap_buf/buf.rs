@@ -90,8 +90,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     pub(crate) fn realloc(&mut self, gap_size: usize) {
         let [start, end] = self.raw.get_parts();
-        let new = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
-        drop(core::mem::replace(&mut self.raw, new));
+        self.raw = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
     }
 
     pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
@@ -110,8 +109,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
                 (temp2.as_slice(), temp.as_slice())
             }
         };
-        let new = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
-        drop(core::mem::replace(&mut self.raw, new));
+        self.raw = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
     }
 }
 
