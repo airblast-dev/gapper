@@ -29,60 +29,85 @@ impl Grower<str> for DefaultGrower {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct TinyGrower;
-impl<T: ?Sized> Grower<T> for TinyGrower {
-    fn base_gap_size(&mut self, _: &T, _: &T) -> usize {
-        1
-    }
-
-    fn max_gap_size(&mut self, _: &T, _: &T) -> usize {
-        1
-    }
-}
-
 #[cfg(test)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum TestGrower {
-    Default(DefaultGrower),
-    TinyGrower(TinyGrower),
-}
+pub(crate) mod test_utils {
+    use rstest_reuse::template;
 
-#[cfg(test)]
-impl TestGrower {
-    pub(crate) const ALL: [Self; 2] = [Self::Default(DefaultGrower), Self::TinyGrower(TinyGrower)];
-}
+    pub(crate) use super::{DefaultGrower, Grower};
 
-#[cfg(test)]
-impl<T> Grower<[T]> for TestGrower {
-    fn max_gap_size(&mut self, start: &[T], end: &[T]) -> usize {
-        match self {
-            Self::Default(d) => d.max_gap_size(start, end),
-            Self::TinyGrower(t) => t.max_gap_size(start, end),
+    #[derive(Clone, Copy, Debug, Default)]
+    pub(crate) struct TinyGrower;
+
+    impl<T: ?Sized> Grower<T> for TinyGrower {
+        fn base_gap_size(&mut self, _: &T, _: &T) -> usize {
+            1
+        }
+
+        fn max_gap_size(&mut self, _: &T, _: &T) -> usize {
+            1
         }
     }
 
-    fn base_gap_size(&mut self, start: &[T], end: &[T]) -> usize {
-        match self {
-            Self::Default(d) => d.base_gap_size(start, end),
-            Self::TinyGrower(t) => t.base_gap_size(start, end),
-        }
-    }
-}
+    #[derive(Clone, Copy, Debug, Default)]
+    pub(crate) struct FuzzyGrower;
 
-#[cfg(test)]
-impl Grower<str> for TestGrower {
-    fn max_gap_size(&mut self, start: &str, end: &str) -> usize {
-        match self {
-            Self::Default(d) => d.max_gap_size(start, end),
-            Self::TinyGrower(t) => t.max_gap_size(start, end),
+    impl<T: ?Sized> Grower<T> for FuzzyGrower {
+        fn base_gap_size(&mut self, _: &T, _: &T) -> usize {
+            rand::random::<u8>() as usize
+        }
+
+        fn max_gap_size(&mut self, _: &T, _: &T) -> usize {
+            rand::random::<u8>() as usize
         }
     }
 
-    fn base_gap_size(&mut self, start: &str, end: &str) -> usize {
-        match self {
-            Self::Default(d) => d.base_gap_size(start, end),
-            Self::TinyGrower(t) => t.base_gap_size(start, end),
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) enum TestGrower {
+        Default(DefaultGrower),
+        Tiny(TinyGrower),
+        Fuzzy(FuzzyGrower),
+    }
+
+    impl<T> Grower<[T]> for TestGrower {
+        fn max_gap_size(&mut self, start: &[T], end: &[T]) -> usize {
+            match self {
+                Self::Default(d) => d.max_gap_size(start, end),
+                Self::Tiny(t) => t.max_gap_size(start, end),
+                Self::Fuzzy(f) => f.max_gap_size(start, end),
+            }
+        }
+
+        fn base_gap_size(&mut self, start: &[T], end: &[T]) -> usize {
+            match self {
+                Self::Default(d) => d.base_gap_size(start, end),
+                Self::Tiny(t) => t.base_gap_size(start, end),
+                Self::Fuzzy(f) => f.base_gap_size(start, end),
+            }
         }
     }
+
+    impl Grower<str> for TestGrower {
+        fn max_gap_size(&mut self, start: &str, end: &str) -> usize {
+            match self {
+                Self::Default(d) => d.max_gap_size(start, end),
+                Self::Tiny(t) => t.max_gap_size(start, end),
+                Self::Fuzzy(f) => f.max_gap_size(start, end),
+            }
+        }
+
+        fn base_gap_size(&mut self, start: &str, end: &str) -> usize {
+            match self {
+                Self::Default(d) => d.base_gap_size(start, end),
+                Self::Tiny(t) => t.base_gap_size(start, end),
+                Self::Fuzzy(f) => f.base_gap_size(start, end),
+            }
+        }
+    }
+
+    #[template]
+    #[rstest]
+    #[case::default(TestGrower::Default(DefaultGrower))]
+    #[case::tiny(TestGrower::Tiny(TinyGrower))]
+    #[case::fuzzy(TestGrower::Fuzzy(FuzzyGrower))]
+    pub fn grower_template(#[case] g: TestGrower) {}
 }

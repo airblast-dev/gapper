@@ -123,102 +123,101 @@ impl<T, G: Grower<[T]>> Drop for GrowingGapBuf<T, G> {
 
 #[cfg(test)]
 mod tests {
-    use crate::grower::TestGrower;
+    use rstest::rstest;
+    use rstest_reuse::apply;
+
+    use crate::grower::test_utils::*;
 
     use super::GrowingGapBuf;
 
     type GapBuf = GrowingGapBuf<String, TestGrower>;
 
-    #[test]
-    fn insert() {
-        for g in TestGrower::ALL {
-            let mut s_buf = GapBuf::with_grower(g);
+    #[apply(grower_template)]
+    fn insert(#[case] g: TestGrower) {
+        let mut s_buf = GapBuf::with_grower(g);
 
-            s_buf.insert(0, String::from("Hi"));
-            assert_eq!(s_buf.get(0).map(String::as_str), Some("Hi"));
-            assert_eq!(s_buf.get(1).map(String::as_str), None);
-            assert_eq!(s_buf.get(2).map(String::as_str), None);
+        s_buf.insert(0, String::from("Hi"));
+        assert_eq!(s_buf.get(0).map(String::as_str), Some("Hi"));
+        assert_eq!(s_buf.get(1), None);
+        assert_eq!(s_buf.get(2), None);
 
-            s_buf.insert(0, String::from("Bye"));
-            assert_eq!(s_buf.get(0).map(String::as_str), Some("Bye"));
-            assert_eq!(s_buf.get(1).map(String::as_str), Some("Hi"));
-            assert_eq!(s_buf.get(2).map(String::as_str), None);
-            assert_eq!(s_buf.get(3).map(String::as_str), None);
+        s_buf.insert(0, String::from("Bye"));
+        assert_eq!(s_buf.get(0).map(String::as_str), Some("Bye"));
+        assert_eq!(s_buf.get(1).map(String::as_str), Some("Hi"));
+        assert_eq!(s_buf.get(2), None);
+        assert_eq!(s_buf.get(3), None);
 
-            s_buf.insert(2, String::from("World"));
-            assert_eq!(s_buf.get(0).map(String::as_str), Some("Bye"));
-            assert_eq!(s_buf.get(1).map(String::as_str), Some("Hi"));
-            assert_eq!(s_buf.get(2).map(String::as_str), Some("World"));
-            assert_eq!(s_buf.get(3).map(String::as_str), None);
-            assert_eq!(s_buf.get(4).map(String::as_str), None);
-        }
+        s_buf.insert(2, String::from("World"));
+        assert_eq!(s_buf.get(0).map(String::as_str), Some("Bye"));
+        assert_eq!(s_buf.get(1).map(String::as_str), Some("Hi"));
+        assert_eq!(s_buf.get(2).map(String::as_str), Some("World"));
+        assert_eq!(s_buf.get(3), None);
+        assert_eq!(s_buf.get(4), None);
     }
 
-    #[test]
-    fn drain() {
-        for g in TestGrower::ALL {
-            let mut s_buf = GapBuf::with_grower(g);
-            for (i, val) in ["1", "2", "3"].map(String::from).into_iter().enumerate() {
-                s_buf.insert(i, val);
-            }
-            let sample = s_buf.clone();
-
-            let drain = s_buf.drain(0..2).unwrap();
-            assert_eq!(drain.as_slice(), &["1", "2"]);
-            drop(drain);
-            assert_eq!(s_buf.get(0).unwrap(), "3");
-            assert_eq!(s_buf.get(1), None);
-            assert_eq!(s_buf.get(2), None);
-            assert_eq!(s_buf.to_slice(), &["3"]);
-
-            let drain = s_buf.drain(0..0).unwrap();
-            assert_eq!(drain.as_slice(), ([] as [String; 0]).as_slice());
-
-            let mut s_buf = sample.clone();
-            let drain = s_buf.drain(0..3).unwrap();
-            let v = Vec::from_iter(drain);
-            assert_eq!(v, &["1", "2", "3"]);
-            s_buf.insert(0, String::from("4"));
-            assert_eq!(s_buf.get(0).unwrap(), "4");
-            assert_eq!(s_buf.get(1), None);
-            assert_eq!(s_buf.get(2), None);
-            assert_eq!(s_buf.to_slice(), &["4"]);
+    #[apply(grower_template)]
+    fn drain(#[case] g: TestGrower) {
+        let mut s_buf = GapBuf::with_grower(g);
+        for (i, val) in ["1", "2", "3"].map(String::from).into_iter().enumerate() {
+            s_buf.insert(i, val);
         }
+        let sample = s_buf.clone();
+
+        let drain = s_buf.drain(0..2).unwrap();
+        assert_eq!(drain.as_slice(), &["1", "2"]);
+        drop(drain);
+        assert_eq!(s_buf.get(0).unwrap(), "3");
+        assert_eq!(s_buf.get(1), None);
+        assert_eq!(s_buf.get(2), None);
+        assert_eq!(s_buf.to_slice(), &["3"]);
+
+        let drain = s_buf.drain(0..0).unwrap();
+        assert_eq!(drain.as_slice(), ([] as [String; 0]).as_slice());
+
+        let mut s_buf = sample.clone();
+        let drain = s_buf.drain(0..3).unwrap();
+        let v = Vec::from_iter(drain);
+        assert_eq!(v, &["1", "2", "3"]);
+        s_buf.insert(0, String::from("4"));
+        assert_eq!(s_buf.get(0).unwrap(), "4");
+        assert_eq!(s_buf.get(1), None);
+        assert_eq!(s_buf.get(2), None);
+        assert_eq!(s_buf.to_slice(), &["4"]);
     }
 
-    #[test]
-    #[allow(clippy::iter_nth_zero)]
-    fn drain_iter() {
-        for g in TestGrower::ALL {
-            let mut s_buf = GapBuf::with_grower(g);
-            for (i, val) in ["1", "2", "3", "4"]
-                .map(String::from)
-                .into_iter()
-                .enumerate()
-            {
-                s_buf.insert(i, val);
-            }
-            let sample = s_buf.clone();
+    #[apply(grower_template)]
+    fn drain_iter(#[case] g: TestGrower) {
+        let mut s_buf = GapBuf::with_grower(g);
+        for (i, val) in ["1", "2", "3", "4"]
+            .map(String::from)
+            .into_iter()
+            .enumerate()
+        {
+            s_buf.insert(i, val);
+        }
+        let sample = s_buf.clone();
 
-            let mut drain_iter = s_buf.drain(0..4).unwrap();
-            assert_eq!(drain_iter.next_back().unwrap(), "4");
-            assert_eq!(drain_iter.next_back().unwrap(), "3");
-            assert_eq!(drain_iter.next().unwrap(), "1");
-            assert_eq!(drain_iter.next().unwrap(), "2");
-            assert!(drain_iter.next().is_none());
-            assert!(drain_iter.next_back().is_none());
+        let mut drain_iter = s_buf.drain(0..4).unwrap();
+        assert_eq!(drain_iter.next_back().unwrap(), "4");
+        assert_eq!(drain_iter.next_back().unwrap(), "3");
+        assert_eq!(drain_iter.next().unwrap(), "1");
+        assert_eq!(drain_iter.next().unwrap(), "2");
+        assert!(drain_iter.next().is_none());
+        assert!(drain_iter.next_back().is_none());
 
-            let mut s_buf = sample.clone();
-            let mut drain_iter = s_buf.drain(1..4).unwrap();
-            assert_eq!(drain_iter.nth(1).unwrap(), "3");
+        let mut s_buf = sample.clone();
+        let mut drain_iter = s_buf.drain(1..4).unwrap();
+        assert_eq!(drain_iter.nth(1).unwrap(), "3");
+        #[allow(clippy::iter_nth_zero)]
+        {
             assert_eq!(drain_iter.nth(0).unwrap(), "4");
             assert_eq!(drain_iter.nth(0), None);
             assert_eq!(drain_iter.nth(1), None);
-            assert_eq!(drain_iter.nth(2), None);
-
-            let mut s_buf = sample.clone();
-            let drain_iter = s_buf.drain(0..4).unwrap();
-            assert_eq!(drain_iter.count(), 4);
         }
+        assert_eq!(drain_iter.nth(2), None);
+
+        let mut s_buf = sample.clone();
+        let drain_iter = s_buf.drain(0..4).unwrap();
+        assert_eq!(drain_iter.count(), 4);
     }
 }
