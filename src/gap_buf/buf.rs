@@ -55,7 +55,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     #[inline]
     pub fn insert(&mut self, at: usize, val: T) {
         assert!(self.raw.get(at).is_some() || self.raw.len() == at);
-        if dbg!(self.raw.gap_len()) == 0 {
+        if self.raw.gap_len() == 0 {
             let [start, end] = self.raw.get_parts();
             let base = self.grower.base_gap_size(start, end);
             let max = self.grower.max_gap_size(start, end);
