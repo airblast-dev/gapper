@@ -66,8 +66,11 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
             self.realloc_gap_at(base.min(max) + 1, at);
         }
         self.raw.move_gap_start_to(at);
+
+        // SAFETY: the target location should never have a value as it is in the gap
         unsafe {
             self.raw.spare_capacity_mut().cast::<T>().write(val);
+            // we have written the value and it is now safe to grow the start
             self.raw.grow_start(1);
         }
     }
@@ -77,12 +80,20 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         let r = get_range(self.raw.len(), r)?;
         self.raw.move_gap_start_to(r.end);
         let ret = Some(Drain {
+            // SAFETY: we have done the necessary range checks and have moved the gap start
+            // position to the end of the provided range
+            // this means the pointer points to a valid [T] starting at r.start and ending at
+            // r.end
             ptr: unsafe {
                 NonNull::slice_from_raw_parts(self.raw.start_ptr().add(r.start), r.len())
             },
             __p: PhantomData,
         });
 
+        // SAFETY: the shrunken portion of the start slice is moved into Drain
+        // this part is now considered removed by the buffer
+        // we have also done the necessary range checks above, and moved the gap to the end of the range
+        // it is now safe safe to shrink as Drain has taken ownership of this portion of the buffer
         unsafe { self.raw.shrink_start(r.len()) };
 
         ret
@@ -109,12 +120,16 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
                 (temp2.as_slice(), temp.as_slice())
             }
         };
+        // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
+        // are dropping the previous buffer to avoid accidental access or drop code being called
         self.raw = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
     }
 }
 
 impl<T, G: Grower<[T]>> Drop for GrowingGapBuf<T, G> {
     fn drop(&mut self) {
+        // SAFETY: after calling this function self cannot be reused
+        // it is safe to drop the inner values
         unsafe { self.raw.drop_t() };
     }
 }
