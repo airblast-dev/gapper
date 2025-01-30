@@ -157,4 +157,38 @@ mod tests {
         assert_eq!(s_buf.get(2), None);
         assert_eq!(s_buf.to_slice(), &["4"]);
     }
+
+    #[test]
+    #[allow(clippy::iter_nth_zero)]
+    fn drain_iter() {
+        let mut s_buf = GapBuf::new();
+        for (i, val) in ["1", "2", "3", "4"]
+            .map(String::from)
+            .into_iter()
+            .enumerate()
+        {
+            s_buf.insert(i, val);
+        }
+        let sample = s_buf.clone();
+
+        let mut drain_iter = s_buf.drain(0..4).unwrap();
+        assert_eq!(drain_iter.next_back().unwrap(), "4");
+        assert_eq!(drain_iter.next_back().unwrap(), "3");
+        assert_eq!(drain_iter.next().unwrap(), "1");
+        assert_eq!(drain_iter.next().unwrap(), "2");
+        assert!(drain_iter.next().is_none());
+        assert!(drain_iter.next_back().is_none());
+
+        let mut s_buf = sample.clone();
+        let mut drain_iter = s_buf.drain(1..4).unwrap();
+        assert_eq!(drain_iter.nth(1).unwrap(), "3");
+        assert_eq!(drain_iter.nth(0).unwrap(), "4");
+        assert_eq!(drain_iter.nth(0), None);
+        assert_eq!(drain_iter.nth(1), None);
+        assert_eq!(drain_iter.nth(2), None);
+
+        let mut s_buf = sample.clone();
+        let drain_iter = s_buf.drain(0..4).unwrap();
+        assert_eq!(drain_iter.count(), 4)
+    }
 }
