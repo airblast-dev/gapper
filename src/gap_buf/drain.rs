@@ -39,10 +39,10 @@ impl<T> Iterator for Drain<'_, T> {
         Self: Sized,
     {
         let len = self.ptr.len();
-        if len == 0 {
+        if n >= len {
             return None;
         }
-        n = n.min(len);
+        n += 1;
         let ptr = self.ptr.cast::<T>();
         let t = unsafe { ptr.read() };
         self.ptr = NonNull::slice_from_raw_parts(unsafe { ptr.add(n) }, len - n);
