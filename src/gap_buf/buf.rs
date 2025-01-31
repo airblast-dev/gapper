@@ -77,6 +77,16 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.get_slice(r)
     }
 
+    #[inline(always)]
+    pub fn get_parts(&self) -> [&[T]; 2] {
+        self.raw.get_parts()
+    }
+
+    #[inline(always)]
+    pub fn get_parts_mut(&mut self) -> [&mut [T]; 2] {
+        self.raw.get_parts_mut()
+    }
+
     /// Shift's the T's to one side and returns a slice of T's
     ///
     /// Calling this method isn't recommended as it requires shifting all of the elements to the
