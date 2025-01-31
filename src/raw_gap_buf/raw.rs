@@ -1,6 +1,6 @@
 use std::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
-use crate::utils::is_get_single;
+use crate::utils::{get_range, is_get_single};
 
 /// Similar to RawVec used in the standard library, this is our inner struct
 ///
@@ -130,6 +130,34 @@ impl<T> RawGapBuf<T> {
         }
         index = self.start_with_offset(index);
         unsafe { Some((self.start_ptr().add(index)).as_ref()) }
+    }
+
+    /// Get a slice of the values in the range
+    ///
+    /// Shifts the items in the buffer to provide a contiguous slice for the provided range.
+    ///
+    /// Unlike [`RawGapBuf::to_slice`], this only moves the range out of the provided range and
+    /// does minimal copying to accomplish this goal. If reading large or disjointed parts, this can be an
+    /// expensive call as more elements will be needed to be shifting.
+    /// This is mainly recommended for cases where the provided range is expected to be fairly small
+    /// compared to the gap.
+    ///
+    /// If calling this in a loop, prefer using [`RawGapBuf::move_gap_out_of`] with the largest
+    /// start and end values of the ranges, and then access the slices via this method.
+    ///
+    /// Returns None if the provided ranges are out of bounds.
+    #[inline(always)]
+    pub fn get_slice(&mut self, r: Range<usize>) -> Option<&[T]> {
+        let r = get_range(self.len(), r)?;
+        self.move_gap_out_of(r.start..r.end);
+        debug_assert!(is_get_single(self.start_len(), r.start, r.end));
+        let start_pos = self.start_with_offset(r.start);
+        // SAFETY: get_range has validated the provided range and the gap has been moved out of
+        // the range. it is now safe to create a slice from the start with offset with a length of
+        // the range
+        Some(unsafe {
+            NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start).as_ref()
+        })
     }
 
     #[inline(always)]
@@ -486,13 +514,34 @@ impl<T> RawGapBuf<T> {
     ///
     /// Determines the position to move the gap whilst moving it out of the range, and doing
     /// minimal copies.
+    ///
+    /// Returns true if the provided range is now on the left side.
     #[inline(always)]
-    pub fn move_gap_out_of(&mut self, r: Range<usize>) {
+    pub fn move_gap_out_of(&mut self, r: Range<usize>) -> bool {
+        // i dont like returning an option bool here
+        // maybe require the higher level type to check for the single get case?
+        assert!(self.total_len() >= r.end && r.start <= r.end);
         // shift the gap out of the specified range whilst doing minimal amount of copying
-        // TODO: optimize
-        let start_len = self.start_len();
-        let move_to = if start_len > r.start { r.start } else { r.end };
+        if r.start > self.start_len() {
+            return true;
+        } else if r.end <= self.start_len() {
+            return false;
+        }
+
+        // determine the minimum copies needed to move the gap out of the range
+        let to_right_copy = self.start_len() - r.start;
+        let to_left_copy = r.end - self.start_len();
+        let is_left;
+        let move_to = if to_right_copy > to_left_copy {
+            is_left = true;
+            r.end
+        } else {
+            is_left = false;
+            r.start
+        };
         self.move_gap_start_to(move_to);
+
+        is_left
     }
 
     /// Drop's Self, calling the drop code of the stored T
@@ -779,6 +828,8 @@ mod tests {
             [["1"].as_slice(), ["2", "3", "4", "5", "6", "7"].as_slice()]
         );
 
+        // this test doesn't just validate the results slice's validity
+        // it also checks if we are moving the minimal elements needed
         s_buf.move_gap_out_of(0..s_buf.len());
         assert_eq!(
             s_buf.get_parts(),
@@ -792,8 +843,8 @@ mod tests {
         assert_eq!(
             s_buf.get_parts(),
             [
+                [].as_slice(),
                 ["1", "2", "3", "4", "5", "6", "7"].as_slice(),
-                [].as_slice()
             ]
         );
     }
@@ -872,5 +923,39 @@ mod tests {
 
         // get items with reversed range
         assert_eq!(s_buf.get_range(6..4), None);
+    }
+
+    #[test]
+    fn get_slice() {
+        let mut s_buf = RawGapBuf::new_with([1, 2, 3], 10, [4, 5, 6]);
+
+        assert_eq!(s_buf.get_slice(0..0).unwrap(), &[]);
+        assert_eq!(s_buf.get_parts(), [&[1, 2, 3], &[4, 5, 6]]);
+        assert_eq!(s_buf.get_slice(0..1).unwrap(), &[1]);
+        assert_eq!(s_buf.get_parts(), [&[1, 2, 3], &[4, 5, 6]]);
+        assert_eq!(s_buf.get_slice(1..2).unwrap(), &[2]);
+        assert_eq!(s_buf.get_parts(), [&[1, 2, 3], &[4, 5, 6]]);
+        assert_eq!(s_buf.get_slice(2..3).unwrap(), &[3]);
+        assert_eq!(s_buf.get_parts(), [&[1, 2, 3], &[4, 5, 6]]);
+
+        // these tests don't just validate the results but also check if the shifting was performed
+        // with minimal copies.
+        assert_eq!(s_buf.get_slice(2..5).unwrap(), &[3, 4, 5]);
+        assert_eq!(
+            s_buf.get_parts(),
+            [[1, 2].as_slice(), [3, 4, 5, 6].as_slice()]
+        );
+
+        assert_eq!(s_buf.get_slice(0..3).unwrap(), &[1, 2, 3]);
+        assert_eq!(
+            s_buf.get_parts(),
+            [[1, 2, 3].as_slice(), [4, 5, 6].as_slice()]
+        );
+
+        assert_eq!(s_buf.get_slice(0..5).unwrap(), &[1, 2, 3, 4, 5]);
+        assert_eq!(
+            s_buf.get_parts(),
+            [[1, 2, 3, 4, 5].as_slice(), [6].as_slice()]
+        );
     }
 }
