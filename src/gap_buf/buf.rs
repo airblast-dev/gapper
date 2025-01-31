@@ -51,12 +51,12 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.get(index)
     }
 
-    /// Get a slice of the values in the range
+    /// Get slices of the values in the range
     ///
     /// If the provided range is not out of bounds, returns two slices of T.
     /// The first one being before the gap, and the second one being after the gap.
     ///
-    /// If a single slice is needed [`GrowingGapBuf::to_slice`] can be used.
+    /// If a single slice is needed [`GrowingGapBuf::get_slice`] can be used.
     #[inline(always)]
     pub fn get_range<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&[T]; 2]> {
         let r = get_range(self.raw.len(), r)?;
@@ -65,10 +65,12 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     /// Get a slice of the values in the range
     ///
-    /// If the provided range is not out of bounds, returns two slices of T.
-    /// The first one being before the gap, and the second one being after the gap.
+    /// If the provided range is not out of bounds, returns a slice of T.
     ///
-    /// If a single slice is needed [`GrowingGapBuf::to_slice`] can be used.
+    /// This method will perform the minimum copies needed to get a contiguous slice.
+    ///
+    /// Calling this method can be expensive with a small gap, large range or disjointed multiple
+    /// reads. [`RawGapBuf::get_range`] should be preferred whenever possible.
     #[inline(always)]
     pub fn get_slice<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&[T]> {
         let r = get_range(self.raw.len(), r)?;
@@ -78,7 +80,9 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// Shift's the T's to one side and returns a slice of T's
     ///
     /// Calling this method isn't recommended as it requires shifting all of the elements to the
-    /// end or start of the buffer. Prefer [`GrowingGapBuf::get_range`] whenever possible.
+    /// end or start of the buffer. Prefer [`GrowingGapBuf::get_range`] whenever possible. If you
+    /// strictly need need a contiguous slice, but only for a specific range, use
+    /// [`GrowingGapBuf::get_slice`] instead.
     #[inline(always)]
     #[allow(clippy::wrong_self_convention)]
     pub fn to_slice(&mut self) -> &[T] {
@@ -86,6 +90,8 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     }
 
     /// Same as [`GrowingGapBuf::to_slice`] but returns a mutable slice
+    ///
+    /// See [`GrowingGapBuf::to_slice`] for more information.
     #[inline(always)]
     pub fn to_slice_mut(&mut self) -> &mut [T] {
         self.raw.to_slice_mut()
@@ -102,8 +108,9 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
             let base = self.grower.base_gap_size(start, end);
             let max = self.grower.max_gap_size(start, end);
             self.realloc_gap_at(base.min(max) + 1, at);
+        } else {
+            self.raw.move_gap_start_to(at);
         }
-        self.raw.move_gap_start_to(at);
 
         // SAFETY: the target location should never have a value as it is in the gap
         unsafe {
