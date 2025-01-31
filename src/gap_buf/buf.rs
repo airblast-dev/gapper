@@ -9,7 +9,7 @@ use crate::{
 use super::drain::Drain;
 
 #[derive(Clone)]
-struct GrowingGapBuf<T, G: Grower<[T]>> {
+pub struct GrowingGapBuf<T, G: Grower<[T]>> {
     raw: RawGapBuf<T>,
     grower: G,
 }
