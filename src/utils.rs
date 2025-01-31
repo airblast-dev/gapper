@@ -1,7 +1,4 @@
-use std::{
-    mem::MaybeUninit,
-    ops::{Bound, Range, RangeBounds},
-};
+use std::ops::{Bound, Range, RangeBounds};
 
 #[inline(always)]
 pub(crate) fn u8_is_char_boundary(u: u8) -> bool {
