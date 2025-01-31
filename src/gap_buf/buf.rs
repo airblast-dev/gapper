@@ -54,6 +54,24 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.gap_len()
     }
 
+    /// Moves the gap out of the provided range
+    ///
+    /// Returns without modifying the gap if it can already be contiguously read.
+    #[inline]
+    pub fn move_gap_out_of<RB: RangeBounds<usize>>(&mut self, r: RB) {
+        let r = get_range(self.len(), r).expect("provided ranges should never be out of bounds");
+        self.raw.move_gap_out_of(r);
+    }
+
+    /// Moves the gap's start to the provided position
+    ///
+    /// # Panics
+    /// Panics if the provided position > len.
+    #[inline]
+    pub fn move_gap_start_to(&mut self, to: usize) {
+        self.raw.move_gap_start_to(to);
+    }
+
     /// Get the value at the provided index
     ///
     /// This will account for the gap so you must provide the index as if you were indexing into a
@@ -144,6 +162,14 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         }
     }
 
+    /// Insert many T's from an iterator at the provided position
+    ///
+    /// This is the [`Extend`] of a gap buffer. Unlike the trait this accepts an insert position
+    /// since inserts are expected to not be at the end in most cases. To push the items to the end
+    /// of the buffer the buffers length can be provided as the position.
+    ///
+    /// # Panics
+    /// If the provided position > len panics.
     #[inline]
     pub fn insert_many<I: Iterator<Item = T>>(&mut self, mut iter: I, at: usize) {
         let mut hint = iter.size_hint().0;
