@@ -70,8 +70,9 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     ///
     /// If a single slice is needed [`GrowingGapBuf::to_slice`] can be used.
     #[inline(always)]
-    pub fn get_slice<RB: RangeBounds<usize>>(&self, r: RB) -> Option<&[T]> {
-        // TODO: redo move_gap_out_of
+    pub fn get_slice<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&[T]> {
+        let r = get_range(self.raw.len(), r)?;
+        self.raw.get_slice(r)
     }
 
     /// Shift's the T's to one side and returns a slice of T's
@@ -206,6 +207,16 @@ mod tests {
 
     type GapBuf = GrowingGapBuf<String, TestGrower>;
 
+    fn fill_gap_buf<G: Grower<[String]>>(gap_buf: &mut GrowingGapBuf<String, G>) {
+        for (i, item) in ["1", "2", "3", "4", "5", "6"]
+            .map(String::from)
+            .into_iter()
+            .enumerate()
+        {
+            gap_buf.insert(i, item);
+        }
+    }
+
     #[apply(grower_template)]
     fn insert(#[case] g: TestGrower) {
         let mut s_buf = GapBuf::with_grower(g);
@@ -293,5 +304,67 @@ mod tests {
         let mut s_buf = sample.clone();
         let drain_iter = s_buf.drain(0..4).unwrap();
         assert_eq!(drain_iter.count(), 4);
+    }
+
+    #[apply(grower_template)]
+    fn get(g: TestGrower) {
+        let mut s_buf = GrowingGapBuf::with_grower(g);
+        for (i, item) in ["1", "2", "3", "4", "5", "6"]
+            .map(String::from)
+            .into_iter()
+            .enumerate()
+        {
+            s_buf.insert(i, item);
+        }
+
+        assert_eq!(s_buf.get(0).unwrap(), "1");
+        assert_eq!(s_buf.get(1).unwrap(), "2");
+        assert_eq!(s_buf.get(2).unwrap(), "3");
+        assert_eq!(s_buf.get(3).unwrap(), "4");
+        assert_eq!(s_buf.get(4).unwrap(), "5");
+        assert_eq!(s_buf.get(5).unwrap(), "6");
+        assert_eq!(s_buf.get(6), None);
+        assert_eq!(s_buf.get(7), None);
+    }
+
+    #[apply(grower_template)]
+    fn get_range(g: TestGrower) {
+        let mut s_buf = GrowingGapBuf::with_grower(g);
+        fill_gap_buf(&mut s_buf);
+
+        assert_eq!(
+            s_buf.get_range(0..6).unwrap(),
+            [["1", "2", "3", "4", "5", "6"].as_slice(), &[]]
+        );
+
+        assert_eq!(s_buf.get_range(1..3).unwrap(), [["2", "3"].as_slice(), &[]]);
+
+        s_buf.raw.move_gap_start_to(1);
+
+        assert_eq!(
+            s_buf.get_range(0..3).unwrap(),
+            [["1"].as_slice(), ["2", "3"].as_slice()]
+        );
+
+        assert_eq!(s_buf.get_range(0..7), None);
+    }
+
+    #[apply(grower_template)]
+    fn get_slice(g: TestGrower) {
+        let mut s_buf = GrowingGapBuf::with_grower(g);
+        fill_gap_buf(&mut s_buf);
+
+        assert_eq!(
+            s_buf.get_slice(0..6).unwrap(),
+            ["1", "2", "3", "4", "5", "6"]
+        );
+
+        assert_eq!(s_buf.get_slice(1..3).unwrap(), ["2", "3"].as_slice());
+
+        s_buf.raw.move_gap_start_to(1);
+
+        assert_eq!(s_buf.get_slice(0..3).unwrap(), ["1", "2", "3"].as_slice());
+
+        assert_eq!(s_buf.get_range(0..7), None);
     }
 }
