@@ -1,6 +1,6 @@
 use std::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
-use crate::utils::{get_range, is_get_single};
+use crate::utils::{get_parts_at, get_range, is_get_single};
 
 /// Similar to RawVec used in the standard library, this is our inner struct
 ///
@@ -553,6 +553,47 @@ impl<T> RawGapBuf<T> {
             self.end.drop_in_place();
         }
     }
+
+    /// Reallocate the buffer with the provided gap size
+    ///
+    /// Generally [`GrowingGapBuf::realloc_gap_at`] should be preferred instead as in most cases of
+    /// reallocation, the goal is to allocate enough space to before an insertion is performed.
+    ///
+    /// This is allows growing or shrinking the gap without any knowledge of the insertions size
+    /// (such as an iterator of T's).
+    pub(crate) fn realloc(&mut self, gap_size: usize) {
+        let [start, end] = self.get_parts();
+        *self = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
+    }
+
+    /// Reallocate the buffer and position the gap start at the provided position
+    ///
+    /// When performing an insertion we reserve enough space for the insertion, move the gap to a
+    /// specific posiiton and copy the value over.
+    ///
+    /// Instead of that, this method makes the "move the gap" step a part of the copying step.
+    /// Rather than shifting around T's we just copy the bytes accounting for the requested gap position
+    /// meaning element shifting isn't performed.
+    pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
+        let [start, end] = self.get_parts();
+        let temp;
+        let temp2;
+        let (left, right) = {
+            let (start, mid, end, before_mid) = get_parts_at(start, end, at);
+            if before_mid {
+                temp2 = [mid, end];
+                temp = [start];
+                (temp.as_slice(), temp2.as_slice())
+            } else {
+                temp2 = [start, mid];
+                temp = [end];
+                (temp2.as_slice(), temp.as_slice())
+            }
+        };
+        // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
+        // are dropping the previous buffer to avoid accidental access or drop code being called
+        *self = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
+    }
 }
 
 // This implementation allows us to cover every single From implementation for a boxed slice
@@ -632,6 +673,7 @@ impl<T> Drop for RawGapBuf<T> {
 
 #[cfg(test)]
 mod tests {
+
     use super::RawGapBuf;
 
     #[test]
@@ -949,5 +991,35 @@ mod tests {
             s_buf.get_parts(),
             [[1, 2, 3, 4, 5].as_slice(), [6].as_slice()]
         );
+    }
+
+    #[test]
+    fn realloc() {
+        let mut s_buf = RawGapBuf::<String>::new();
+        s_buf.realloc(20);
+        assert_eq!(s_buf.gap_len(), 20);
+        assert!(s_buf.is_empty());
+        unsafe {
+            s_buf.start_ptr().write(String::from("Hi"));
+            s_buf.grow_start(1);
+            s_buf.end_ptr().sub(1).write(String::from("Bye"));
+            s_buf.grow_end(1);
+        };
+
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.realloc(10);
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.realloc(20);
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.realloc(0);
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.realloc(30);
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.drop_in_place();
     }
 }

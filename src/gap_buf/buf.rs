@@ -228,47 +228,14 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         ret
     }
 
-    /// Reallocate the buffer with the provided gap size
-    ///
-    /// Generally [`GrowingGapBuf::realloc_gap_at`] should be preferred instead as in most cases of
-    /// reallocation, the goal is to allocate enough space to before an insertion is performed.
-    ///
-    /// This is allows growing or shrinking the gap without any knowledge of the insertions size
-    /// (such as an iterator of T's).
+    /// See [`RawGapBuf::realloc`]
     pub(crate) fn realloc(&mut self, gap_size: usize) {
-        let [start, end] = self.raw.get_parts();
-        // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
-        // are dropping the previous buffer to avoid accidental access or drop code being called
-        self.raw = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
+        self.raw.realloc(gap_size);
     }
 
-    /// Reallocate the buffer and position the gap start at the provided position
-    ///
-    /// When performing an insertion we reserve enough space for the insertion, move the gap to a
-    /// specific posiiton and copy the value over.
-    ///
-    /// Instead of that, this method makes the "move the gap" step a part of the copying step.
-    /// Rather than shifting around T's we just copy the bytes accounting for the requested gap position
-    /// meaning element shifting isn't performed.
+    /// See [`RawGapBuf::realloc_gap_at`]
     pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
-        let [start, end] = self.raw.get_parts();
-        let temp;
-        let temp2;
-        let (left, right) = {
-            let (start, mid, end, before_mid) = get_parts_at(start, end, at);
-            if before_mid {
-                temp2 = [mid, end];
-                temp = [start];
-                (temp.as_slice(), temp2.as_slice())
-            } else {
-                temp2 = [start, mid];
-                temp = [end];
-                (temp2.as_slice(), temp.as_slice())
-            }
-        };
-        // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
-        // are dropping the previous buffer to avoid accidental access or drop code being called
-        self.raw = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
+        self.raw.realloc_gap_at(gap_size, at);
     }
 }
 
