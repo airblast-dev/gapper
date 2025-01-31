@@ -130,6 +130,33 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         }
     }
 
+    #[inline]
+    pub fn insert_many<I: Iterator<Item = T>>(&mut self, mut iter: I, at: usize) {
+        let mut hint = iter.size_hint().0;
+        self.raw.move_gap_start_to(at);
+        while let Some(item) = iter.next() {
+            if self.raw.gap_len() < hint {
+                let [start, end] = self.raw.get_parts();
+                let base_gap_size = self.grower.base_gap_size(start, end);
+                self.realloc(base_gap_size + hint.max(1));
+            }
+
+            // SAFETY: we have moved the gap to the first T position in the gap, each item we add
+            // shifts it by one. we have also growed the gap to account for the insert.
+            // It is now safe to write the T and grow our start slice
+            unsafe {
+                self.raw
+                    .start_ptr_mut()
+                    .add(self.raw.start_len())
+                    .write(item);
+                // The grow is intentionally adjusted on every iteration as we are calling user code which
+                // could panic and leave our buffer in an invalid state.
+                self.raw.grow_start(1);
+            };
+            hint = iter.size_hint().0;
+        }
+    }
+
     /// Drains the provided range from the gap buffer
     ///
     /// If the provided ranges are out of bounds returns None.
@@ -255,6 +282,25 @@ mod tests {
         assert_eq!(s_buf.get(2).map(String::as_str), Some("World"));
         assert_eq!(s_buf.get(3), None);
         assert_eq!(s_buf.get(4), None);
+    }
+
+    #[apply(grower_template)]
+    fn insert_many(#[case] g: TestGrower) {
+        let mut s_buf = GapBuf::with_grower(g);
+        s_buf.insert_many([1, 2, 3, 4].map(|n| n.to_string()).into_iter(), 0);
+        assert_eq!(
+            s_buf.get_parts(),
+            [["1", "2", "3", "4"].as_slice(), [].as_slice()]
+        );
+
+        s_buf.insert_many(["a", "b", "c", "d"].map(|n| n.to_string()).into_iter(), 2);
+        assert_eq!(
+            s_buf.get_parts(),
+            [
+                ["1", "2", "a", "b", "c", "d"].as_slice(),
+                ["3", "4"].as_slice()
+            ]
+        );
     }
 
     #[apply(grower_template)]
