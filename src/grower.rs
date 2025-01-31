@@ -13,7 +13,7 @@ impl<T> Grower<[T]> for DefaultGrower {
 
     #[inline(always)]
     fn max_gap_size(&mut self, start: &[T], end: &[T]) -> usize {
-        ((start.len() + end.len()) / 100 * 5).max(self.base_gap_size(start, end))
+        ((start.len() + end.len()) / 100 * 5).min(self.base_gap_size(start, end))
     }
 }
 
