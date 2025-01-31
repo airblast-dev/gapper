@@ -515,34 +515,25 @@ impl<T> RawGapBuf<T> {
     ///
     /// Determines the position to move the gap whilst moving it out of the range, and doing
     /// minimal copies.
-    ///
-    /// Returns true if the provided range is now on the left side.
     #[inline(always)]
-    pub fn move_gap_out_of(&mut self, r: Range<usize>) -> bool {
+    pub fn move_gap_out_of(&mut self, r: Range<usize>) {
         // i dont like returning an option bool here
         // maybe require the higher level type to check for the single get case?
         assert!(self.total_len() >= r.end && r.start <= r.end);
         // shift the gap out of the specified range whilst doing minimal amount of copying
-        if r.start > self.start_len() {
-            return true;
-        } else if r.end <= self.start_len() {
-            return false;
+        if r.start > self.start_len() || r.end <= self.start_len() {
+            return;
         }
 
         // determine the minimum copies needed to move the gap out of the range
         let to_right_copy = self.start_len() - r.start;
         let to_left_copy = r.end - self.start_len();
-        let is_left;
         let move_to = if to_right_copy > to_left_copy {
-            is_left = true;
             r.end
         } else {
-            is_left = false;
             r.start
         };
         self.move_gap_start_to(move_to);
-
-        is_left
     }
 
     /// Drop's Self, calling the drop code of the stored T
