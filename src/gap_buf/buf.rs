@@ -40,6 +40,20 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         }
     }
 
+    /// Returns the total length of the buffer excluding the gap length
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.raw.len()
+    }
+
+    /// Returns the gap length
+    ///
+    /// This is the same as [`Vec::capacity`] but for a gap buffer.
+    #[inline(always)]
+    pub fn gap_len(&self) -> usize {
+        self.raw.gap_len()
+    }
+
     /// Get the value at the provided index
     ///
     /// This will account for the gap so you must provide the index as if you were indexing into a
