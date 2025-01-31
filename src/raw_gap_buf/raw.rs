@@ -163,9 +163,7 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub fn get_range(&self, r: Range<usize>) -> Option<[&[T]; 2]> {
         let len = self.len();
-        if r.start >= len || r.end > len || r.start > r.end {
-            return None;
-        }
+        let r = get_range(len, r)?;
 
         let (start_pos, end_pos) = (self.start_with_offset(r.start), self.end_with_offset(r.end));
 
