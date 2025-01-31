@@ -168,6 +168,9 @@ impl<T> RawGapBuf<T> {
         let (start_pos, end_pos) = (self.start_with_offset(r.start), self.end_with_offset(r.end));
 
         if is_get_single(self.start_len(), start_pos, end_pos) {
+            // TODO: return if it was the left or right part correctly
+            // code calling this method should handle both slices gracefully but we should still
+            // aim for consistency within the API
             let single = unsafe {
                 NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start)
                     .as_ref()
