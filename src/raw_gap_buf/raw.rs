@@ -833,7 +833,6 @@ mod tests {
         assert_eq!(s_buf.get(6), None);
     }
 
-    #[test]
     // this is pretty stupid as the range isn't iterated over and a user can easily construct such
     // a range
     //
@@ -841,8 +840,9 @@ mod tests {
     // reading the lint information, it seems a range is treated as an iterator an not a
     // range?
     // https://rust-lang.github.io/rust-clippy/master/index.html#reversed_empty_ranges
+    #[test]
     #[allow(clippy::reversed_empty_ranges)]
-    fn get_slice() {
+    fn get_range() {
         let s_buf = RawGapBuf::new_with([1, 2, 3], 10, [4, 5]);
 
         // check if all values stored are returned
