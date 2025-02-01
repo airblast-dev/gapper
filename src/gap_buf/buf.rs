@@ -149,7 +149,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
             let [start, end] = self.raw.get_parts();
             let base = self.grower.base_gap_size(start, end);
             let max = self.grower.max_gap_size(start, end);
-            self.realloc_gap_at(base.min(max) + 1, at);
+            self.grow_gap_at(base.min(max) + 1, at);
         } else {
             self.raw.move_gap_start_to(at);
         }
@@ -176,9 +176,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.move_gap_start_to(at);
         while let Some(item) = iter.next() {
             if self.raw.gap_len() < hint {
-                let [start, end] = self.raw.get_parts();
-                let base_gap_size = self.grower.base_gap_size(start, end);
-                self.realloc(base_gap_size + hint.max(1));
+                self.grow_gap(hint.max(1));
             }
 
             // SAFETY: we have moved the gap to the first T position in the gap, each item we add
@@ -229,13 +227,13 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     }
 
     /// See [`RawGapBuf::realloc`]
-    pub(crate) fn realloc(&mut self, gap_size: usize) {
-        self.raw.realloc(gap_size);
+    pub(crate) fn grow_gap(&mut self, by: usize) {
+        self.raw.grow_gap(by);
     }
 
     /// See [`RawGapBuf::realloc_gap_at`]
-    pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
-        self.raw.realloc_gap_at(gap_size, at);
+    pub(crate) fn grow_gap_at(&mut self, by: usize, at: usize) {
+        self.raw.grow_gap_at(by, at);
     }
 }
 

@@ -1,4 +1,10 @@
-use std::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr::NonNull};
+use std::{
+    alloc::{self, handle_alloc_error, Layout},
+    mem::{size_of, size_of_val, MaybeUninit},
+    num::NonZeroUsize,
+    ops::Range,
+    ptr::NonNull,
+};
 
 use crate::utils::{get_parts_at, get_range, is_get_single};
 
@@ -47,11 +53,24 @@ impl<T> RawGapBuf<T> {
         gap_size: usize,
         mut end: [T; E],
     ) -> Self {
-        let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(S + E + gap_size);
-        let leaked = NonNull::from(Box::leak(buf_ptr)).cast::<T>();
+        let total_len = start.len() + end.len() + gap_size;
+        let layout =
+            Layout::array::<T>(total_len).expect("unable to initialize layout for allocation");
+        if layout.size() == 0 {
+            let dangling = NonNull::slice_from_raw_parts(NonNull::dangling(), 0);
+            return Self {
+                start: dangling,
+                end: dangling,
+            };
+        }
+        // SAFETY: we checked if our size is zero above, it is now safe to allocate
+        let Some(alloc_ptr) = NonNull::new(unsafe { alloc::alloc(layout) }).map(NonNull::cast::<T>)
+        else {
+            handle_alloc_error(layout)
+        };
         unsafe {
-            leaked.copy_from_nonoverlapping(NonNull::from(&mut start).cast::<T>(), S);
-            leaked
+            alloc_ptr.copy_from_nonoverlapping(NonNull::from(&mut start).cast::<T>(), S);
+            alloc_ptr
                 .add(S + gap_size)
                 .copy_from_nonoverlapping(NonNull::from(&mut end).cast::<T>(), E);
 
@@ -59,8 +78,8 @@ impl<T> RawGapBuf<T> {
             core::mem::forget(end);
 
             Self {
-                start: NonNull::slice_from_raw_parts(leaked, S),
-                end: NonNull::slice_from_raw_parts(leaked.add(S + gap_size), E),
+                start: NonNull::slice_from_raw_parts(alloc_ptr, S),
+                end: NonNull::slice_from_raw_parts(alloc_ptr.add(S + gap_size), E),
             }
         }
     }
@@ -75,8 +94,21 @@ impl<T> RawGapBuf<T> {
     pub unsafe fn new_with_slice(start: &[&[T]], gap_size: usize, end: &[&[T]]) -> Self {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
-        let buf_ptr: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_size + end_len);
-        let leaked = NonNull::from(Box::leak(buf_ptr)).cast::<T>();
+        let total_len = start_len + end_len + gap_size;
+        let layout = Layout::array::<T>(total_len).expect("unable to initialize layout");
+        if layout.size() == 0 {
+            let dangling = NonNull::slice_from_raw_parts(NonNull::dangling(), 0);
+            return Self {
+                start: dangling,
+                end: dangling,
+            };
+        }
+
+        // SAFETY: we checked if our size is zero above, it is now safe to allocate
+        let Some(alloc_ptr) = NonNull::new(unsafe { alloc::alloc(layout) }).map(NonNull::cast::<T>)
+        else {
+            handle_alloc_error(layout);
+        };
 
         let mut i = 0;
         let mut offset = 0;
@@ -84,7 +116,7 @@ impl<T> RawGapBuf<T> {
         while i < start.len() {
             let i_len = start[i].len();
             unsafe {
-                leaked
+                alloc_ptr
                     .add(offset)
                     .copy_from_nonoverlapping(NonNull::from(start[i]).cast::<T>(), i_len)
             };
@@ -98,7 +130,7 @@ impl<T> RawGapBuf<T> {
         while i < end.len() {
             let i_len = end[i].len();
             unsafe {
-                leaked
+                alloc_ptr
                     .add(offset)
                     .copy_from_nonoverlapping(NonNull::from(end[i]).cast::<T>(), i_len)
             };
@@ -106,9 +138,9 @@ impl<T> RawGapBuf<T> {
             offset += i_len;
         }
         Self {
-            start: NonNull::slice_from_raw_parts(leaked, start_len),
+            start: NonNull::slice_from_raw_parts(alloc_ptr, start_len),
             end: unsafe {
-                NonNull::slice_from_raw_parts(leaked.add(start_len + gap_size), end_len)
+                NonNull::slice_from_raw_parts(alloc_ptr.add(start_len + gap_size), end_len)
             },
         }
     }
@@ -561,9 +593,10 @@ impl<T> RawGapBuf<T> {
     ///
     /// This is allows growing or shrinking the gap without any knowledge of the insertions size
     /// (such as an iterator of T's).
-    pub(crate) fn realloc(&mut self, gap_size: usize) {
+    pub(crate) fn grow_gap(&mut self, by: usize) {
         let [start, end] = self.get_parts();
-        *self = unsafe { RawGapBuf::new_with_slice(&[start], gap_size, &[end]) };
+        // TODO: use realloc function
+        *self = unsafe { RawGapBuf::new_with_slice(&[start], self.gap_len() + by, &[end]) };
     }
 
     /// Reallocate the buffer and position the gap start at the provided position
@@ -574,25 +607,41 @@ impl<T> RawGapBuf<T> {
     /// Instead of that, this method makes the "move the gap" step a part of the copying step.
     /// Rather than shifting around T's we just copy the bytes accounting for the requested gap position
     /// meaning element shifting isn't performed.
-    pub(crate) fn realloc_gap_at(&mut self, gap_size: usize, at: usize) {
-        let [start, end] = self.get_parts();
-        let temp;
-        let temp2;
-        let (left, right) = {
-            let (start, mid, end, before_mid) = get_parts_at(start, end, at);
-            if before_mid {
-                temp2 = [mid, end];
-                temp = [start];
-                (temp.as_slice(), temp2.as_slice())
+    pub(crate) fn grow_gap_at(&mut self, by: usize, at: usize) {
+        let start_len = self.start_len();
+        let gap_len = self.gap_len();
+        let end_len = self.end_len();
+        let layout =
+            Layout::array::<T>(self.total_len()).expect("unable to initialize layout for realloc");
+        let new_layout = Layout::array::<T>(start_len + end_len + gap_len + by)
+            .expect("unable to initialize layout for realloc");
+        if new_layout.size() == 0 {
+            *self = Self::new();
+            return;
+        }
+
+        let Some(start_ptr) = NonNull::new(unsafe {
+            if layout.size() > 0 {
+                alloc::realloc(
+                    self.start_ptr().as_ptr().cast::<u8>(),
+                    layout,
+                    new_layout.size(),
+                )
             } else {
-                temp2 = [start, mid];
-                temp = [end];
-                (temp2.as_slice(), temp.as_slice())
+                alloc::alloc(new_layout)
             }
+        })
+        .map(NonNull::cast::<T>) else {
+            handle_alloc_error(new_layout);
         };
-        // SAFETY: since we are reallocating the buffer we do not want to call any drop code and we
-        // are dropping the previous buffer to avoid accidental access or drop code being called
-        *self = unsafe { RawGapBuf::new_with_slice(left, gap_size, right) };
+
+        // TODO: handle shrinking
+        self.start = NonNull::slice_from_raw_parts(start_ptr, start_len);
+        let old_end = unsafe { self.start_ptr().add(start_len + gap_len) };
+        self.end =
+            NonNull::slice_from_raw_parts(unsafe { self.start_ptr().add(start_len + by) }, end_len);
+        unsafe { old_end.copy_to(self.end_ptr(), end_len) };
+        self.move_gap_start_to(at);
     }
 }
 
@@ -605,22 +654,26 @@ where
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
-        let buf: Box<[MaybeUninit<T>]> = Box::new_uninit_slice(start_len + gap_len + end_len);
-        let leaked = NonNull::from(Box::leak(buf)).cast::<T>();
+        let layout = Layout::array::<T>(start_len + gap_len + end_len)
+            .expect("unable to initialize layout for allocation");
+        let Some(alloc_ptr) = NonNull::new(unsafe { alloc::alloc(layout) }).map(NonNull::cast::<T>)
+        else {
+            handle_alloc_error(layout);
+        };
         unsafe {
             let [start, end] = self.get_parts();
             for (i, item) in start.iter().enumerate() {
-                leaked.add(i).write(item.clone());
+                alloc_ptr.add(i).write(item.clone());
             }
 
-            let end_start = leaked.add(start_len + gap_len);
+            let end_start = alloc_ptr.add(start_len + gap_len);
 
             for (i, item) in end.iter().enumerate() {
                 end_start.add(i).write(item.clone());
             }
 
             Self {
-                start: NonNull::slice_from_raw_parts(leaked, start_len),
+                start: NonNull::slice_from_raw_parts(alloc_ptr, start_len),
                 end: NonNull::slice_from_raw_parts(end_start, end_len),
             }
         }
@@ -653,20 +706,16 @@ impl<T> Drop for RawGapBuf<T> {
     fn drop(&mut self) {
         unsafe {
             let total_len = self.total_len();
+            if total_len == 0 {
+                return;
+            }
 
-            // only deal with the box's allocation
-            // the drop code of T should be handled by a higher level type
-            //
-            // reconstruct the box using the total length and MaybeUninit to have correct
-            // alignment and size whilst avoiding calling T's drop code.
-            //
-            // SAFETY: MaybeUninit is guaranteed to have the same layout as T
-            let ptr = NonNull::slice_from_raw_parts(
-                self.start_ptr_mut().cast::<MaybeUninit<T>>(),
-                total_len,
+            // SAFETY: The pointer is guaranteed to be allocated by the global allocator, and the length
+            // provided is the exact value that was used whilst allocating.
+            alloc::dealloc(
+                self.start.as_ptr() as *mut u8,
+                Layout::array::<T>(total_len).expect("unable to intialize layout for allocation"),
             );
-
-            drop(Box::<[MaybeUninit<T>]>::from_raw(ptr.as_ptr()));
         }
     }
 }
@@ -996,7 +1045,7 @@ mod tests {
     #[test]
     fn realloc() {
         let mut s_buf = RawGapBuf::<String>::new();
-        s_buf.realloc(20);
+        s_buf.grow_gap(20);
         assert_eq!(s_buf.gap_len(), 20);
         assert!(s_buf.is_empty());
         unsafe {
@@ -1008,16 +1057,16 @@ mod tests {
 
         assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
 
-        s_buf.realloc(10);
+        s_buf.grow_gap(10);
         assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
 
-        s_buf.realloc(20);
+        s_buf.grow_gap(20);
         assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
 
-        s_buf.realloc(0);
+        s_buf.grow_gap(0);
         assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
 
-        s_buf.realloc(30);
+        s_buf.grow_gap(30);
         assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
 
         s_buf.drop_in_place();
