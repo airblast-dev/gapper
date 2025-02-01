@@ -630,6 +630,7 @@ impl<T> RawGapBuf<T> {
             handle_alloc_error(new_layout);
         };
 
+        // TODO: once the allocator API is stabilized use grow or similar methods
         self.start = NonNull::slice_from_raw_parts(start_ptr, start_len);
         // SAFETY: these are part of the same allocation so no wrapping or such can occur
         let old_end = unsafe { self.start_ptr().add(start_len + gap_len) };
