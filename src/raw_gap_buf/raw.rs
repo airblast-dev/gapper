@@ -594,9 +594,8 @@ impl<T> RawGapBuf<T> {
     /// This is allows growing or shrinking the gap without any knowledge of the insertions size
     /// (such as an iterator of T's).
     pub(crate) fn grow_gap(&mut self, by: usize) {
-        let [start, end] = self.get_parts();
-        // TODO: use realloc function
-        *self = unsafe { RawGapBuf::new_with_slice(&[start], self.gap_len() + by, &[end]) };
+        let [start, _] = self.get_parts();
+        self.grow_gap_at(by, start.len());
     }
 
     /// Reallocate the buffer and position the gap start at the provided position
@@ -604,8 +603,8 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
-        let layout =
-            Layout::array::<T>(self.total_len()).expect("unable to initialize layout for realloc");
+        let layout = Layout::array::<T>(start_len + gap_len + end_len)
+            .expect("unable to initialize layout for realloc");
         let new_layout = Layout::array::<T>(start_len + end_len + gap_len + by)
             .expect("unable to initialize layout for realloc");
         if new_layout.size() == 0 {
@@ -614,6 +613,7 @@ impl<T> RawGapBuf<T> {
         }
 
         let Some(start_ptr) = NonNull::new(unsafe {
+            // SAFETY: we know that we already allocated due to the size
             if layout.size() > 0 {
                 alloc::realloc(
                     self.start_ptr().as_ptr().cast::<u8>(),
@@ -621,6 +621,8 @@ impl<T> RawGapBuf<T> {
                     new_layout.size(),
                 )
             } else {
+                // SAFETY: we already checked if the new layouts size is zero and returned early if
+                // so
                 alloc::alloc(new_layout)
             }
         })
@@ -628,11 +630,14 @@ impl<T> RawGapBuf<T> {
             handle_alloc_error(new_layout);
         };
 
-        // TODO: handle shrinking
         self.start = NonNull::slice_from_raw_parts(start_ptr, start_len);
+        // SAFETY: these are part of the same allocation so no wrapping or such can occur
         let old_end = unsafe { self.start_ptr().add(start_len + gap_len) };
-        self.end =
-            NonNull::slice_from_raw_parts(unsafe { self.start_ptr().add(start_len + by) }, end_len);
+        self.end = NonNull::slice_from_raw_parts(
+            unsafe { self.start_ptr().add(start_len + gap_len + by) },
+            end_len,
+        );
+        // SAFETY: the realloc call copied the bytes, these values are now initialized
         unsafe { old_end.copy_to(self.end_ptr(), end_len) };
         self.move_gap_start_to(at);
     }
