@@ -600,13 +600,6 @@ impl<T> RawGapBuf<T> {
     }
 
     /// Reallocate the buffer and position the gap start at the provided position
-    ///
-    /// When performing an insertion we reserve enough space for the insertion, move the gap to a
-    /// specific posiiton and copy the value over.
-    ///
-    /// Instead of that, this method makes the "move the gap" step a part of the copying step.
-    /// Rather than shifting around T's we just copy the bytes accounting for the requested gap position
-    /// meaning element shifting isn't performed.
     pub(crate) fn grow_gap_at(&mut self, by: usize, at: usize) {
         let start_len = self.start_len();
         let gap_len = self.gap_len();
