@@ -94,8 +94,8 @@ impl<T> RawGapBuf<T> {
     pub unsafe fn new_with_slice(start: &[&[T]], gap_size: usize, end: &[&[T]]) -> Self {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
-        let total_len = start_len + end_len + gap_size;
-        assert!(Self::IS_ZST || total_len <= isize::MAX as usize);
+        let total_len: usize = start_len + end_len + gap_size;
+
         if Self::IS_ZST {
             return Self {
                 start: NonNull::slice_from_raw_parts(NonNull::dangling(), start_len),
