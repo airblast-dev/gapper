@@ -2,7 +2,7 @@ use std::{
     cmp::Ordering,
     marker::PhantomData,
     mem::{transmute, MaybeUninit},
-    ops::{Deref, Range, RangeBounds},
+    ops::{Deref, DerefMut, Range, RangeBounds},
     ptr::NonNull,
     str::{from_utf8_unchecked, Chars},
 };
@@ -302,6 +302,12 @@ impl<'a> Deref for Drain<'a> {
     type Target = Chars<'a>;
     fn deref(&self) -> &Self::Target {
         &self.chars
+    }
+}
+
+impl DerefMut for Drain<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.chars
     }
 }
 
