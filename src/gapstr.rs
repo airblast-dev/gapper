@@ -186,6 +186,8 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 self.buf.move_gap_start_to(r.end);
                 // SAFETY: the source is correctly aligned and we know that the slice is not
                 // overlapping
+                // we have shifted the gap to the end of the range and we are not overwriting the
+                // contents of the end slice
                 unsafe {
                     self.buf
                         .start_ptr()
