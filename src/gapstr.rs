@@ -104,6 +104,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
             return None;
         }
         let s = self.buf.get_slice(r)?;
+        // SAFETY: we have checked if the range is on a char boundary above
         unsafe { Some(from_utf8_unchecked(s)) }
     }
 
