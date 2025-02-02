@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     ops::{Range, RangeBounds},
     ptr::NonNull,
     str::{from_utf8_unchecked, Chars},
@@ -155,6 +156,51 @@ impl<G: Grower<str>> GrowingGapString<G> {
         s.chars()
     }
 
+    pub fn replace_range<RB: RangeBounds<usize>>(&mut self, r: RB, s: &str) {
+        let r = get_range(self.buf.len(), r).expect("out of bounds range for replace_range");
+        assert!(self.is_get_char_boundary(r.start..r.end));
+        match r.len().cmp(&s.len()) {
+            Ordering::Greater => {
+                self.buf.move_gap_start_to(r.end);
+                unsafe {
+                    // SAFETY: we just checked the bounds above
+                    self.buf.get_parts_mut()[0]
+                        .get_unchecked_mut(r.start..r.start + s.len())
+                        .copy_from_slice(s.as_bytes());
+                    // SAFETY: we checked the bounds above and r.len is greater than s.len so no
+                    // overflow can occur
+                    self.buf.shrink_start(r.len() - s.len());
+                }
+            }
+            Ordering::Less => {
+                let needed_space = s.len() - r.len();
+                if self.buf.gap_len() < needed_space {
+                    let [start, end] = self
+                        .buf
+                        .get_parts()
+                        .map(|s| unsafe { from_utf8_unchecked(s) });
+                    let base_gap_size = self.grower.base_gap_size(start, end);
+                    self.buf.grow_gap(needed_space + base_gap_size);
+                }
+
+                self.buf.move_gap_start_to(r.end);
+                // SAFETY: the source is correctly aligned and we know that the slice is not
+                // overlapping
+                unsafe {
+                    self.buf
+                        .start_ptr()
+                        .add(r.start)
+                        .copy_from_nonoverlapping(NonNull::from(s).cast::<u8>(), s.len());
+                    self.buf.grow_start(needed_space);
+                };
+            }
+            Ordering::Equal => {
+                // SAFETY: we just checked the bounds above
+                unsafe { self.buf.get_slice(r.start..r.end).unwrap_unchecked() }
+                    .copy_from_slice(s.as_bytes());
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -243,5 +289,24 @@ mod tests {
         let dr = s_buf.drain(..);
         assert_eq!(dr.as_str(), "Hello");
         assert!(s_buf.is_empty());
+    }
+
+    #[apply(grower_template)]
+    fn replace_range(g: TestGrower) {
+        let mut s_buf = GrowingGapString::with_grower(g);
+        s_buf.insert("Hello", 0);
+        s_buf.insert("Bye", 5);
+
+        // same length
+        s_buf.replace_range(0..3, "ABC");
+        assert_eq!(s_buf.get_slice(..).unwrap(), "ABCloBye");
+
+        // growing
+        s_buf.replace_range(5..8, "1234");
+        assert_eq!(s_buf.get_slice(..).unwrap(), "ABClo1234");
+
+        // shrinking
+        s_buf.replace_range(5..8, "X");
+        assert_eq!(s_buf.get_slice(..).unwrap(), "ABCloX4");
     }
 }
