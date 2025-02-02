@@ -119,11 +119,13 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.get_slice(r)
     }
 
+    /// Get the left and right side of the gap buffer
     #[inline(always)]
     pub fn get_parts(&self) -> [&[T]; 2] {
         self.raw.get_parts()
     }
 
+    /// Get the left and right side of the gap buffer as mutable slices
     #[inline(always)]
     pub fn get_parts_mut(&mut self) -> [&mut [T]; 2] {
         self.raw.get_parts_mut()
