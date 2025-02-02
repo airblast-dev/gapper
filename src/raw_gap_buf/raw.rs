@@ -619,6 +619,7 @@ impl<T> RawGapBuf<T> {
         // no need to check if size exceeds isize::MAX, layout returns error variant anyway
         assert!(self.len() >= at);
         if Self::IS_ZST {
+            // fake the gap grow
             *self = Self {
                 start: NonNull::slice_from_raw_parts(NonNull::dangling(), at),
                 end: NonNull::slice_from_raw_parts(NonNull::dangling(), self.len() - at),
