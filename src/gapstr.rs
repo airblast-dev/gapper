@@ -240,6 +240,14 @@ impl<G: Grower<str>> GrowingGapString<G> {
             }
         }
     }
+
+    /// Equivalent of [`String::reserve_exact`] from the standard library
+    ///
+    /// This will allocate space for the provided value exactly. If inserting multiple string
+    /// slices in a loop, use this to reserve enough space in the gap.
+    pub fn grow_gap(&mut self, by: usize) {
+        self.buf.grow_gap(by);
+    }
 }
 
 #[cfg(test)]
