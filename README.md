@@ -8,16 +8,16 @@ In the most simple terms, a gap buffer is a dynamic array (`Vec`) with its extra
 
 See https://en.wikipedia.org/wiki/Gap_buffer for more information on what a gap buffer is.
 
-# The main types
+# The Core Types
 
-The library consists of two core types and one trait:
+In its core, two structs, and one trait is provided to initialize and iteract with a gap buffer:
 - GapBuf
 - GapString
 - Grower
 
 ## GapBuf
-This is a general use gap buffer that can store any `Sized` type. In some cases a `GapBuf<char>` may be preferred when working
-on a text editor or LSP.
+This is a general use gap buffer that can store any `Sized` type. In some cases a `GapBuf<char>` may be preferred instead of a string
+when working on a text editor or LSP.
 
 Depending on the use case a `Grower<[T]>` can be provided to `GrowingGapBuf::with_grower` to initialize a gap buffer with your own
 grow logic.
