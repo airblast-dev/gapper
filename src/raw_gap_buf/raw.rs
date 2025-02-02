@@ -672,7 +672,43 @@ impl<T> RawGapBuf<T> {
     }
 
     pub fn shrink_gap(&mut self, by: usize) {
-        assert!(self.gap_len() >= by);
+        if Self::IS_ZST {
+            return;
+        }
+
+        let gap_len = self.gap_len();
+
+        assert!(gap_len >= by);
+        let start_len = self.start_len();
+        let end_len = self.end_len();
+        let total_len = start_len + gap_len + end_len;
+        unsafe {
+            let gap_ptr = self.start_ptr().add(self.start_len() + gap_len - by);
+
+            // SAFETY: both are valid for enough read and writes
+            self.end_ptr().copy_to(gap_ptr, self.end_len());
+
+            // SAFETY: we already validated the layout during allocation
+            let layout = Layout::array::<T>(total_len).unwrap_unchecked();
+            // SAFETY: the pointer is properly aligned and does point to allocated memory as we have
+            // checked the size above
+            let Some(new_ptr) = NonNull::new(alloc::realloc(
+                self.start_ptr().as_ptr().cast::<u8>(),
+                layout,
+                (total_len - by)
+                    .checked_mul(size_of::<T>())
+                    .expect("unable to allocate space for more than isize::MAX bytes"),
+            ))
+            .map(NonNull::cast::<T>) else {
+                // never should panic as we are shrinking the old layout
+                handle_alloc_error(Layout::array::<T>(total_len - by).unwrap());
+            };
+
+            self.start = NonNull::slice_from_raw_parts(new_ptr, start_len);
+            // SAFETY: points to the same allocation but now with the end slice at its shifted
+            // location
+            self.end = NonNull::slice_from_raw_parts(new_ptr.add(start_len + gap_len - by), end_len)
+        }
     }
 }
 
@@ -1074,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn realloc() {
+    fn grow_gap() {
         let mut s_buf = RawGapBuf::<String>::new();
         s_buf.grow_gap(20);
         assert_eq!(s_buf.gap_len(), 20);
@@ -1101,5 +1137,64 @@ mod tests {
         assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
 
         s_buf.drop_in_place();
+    }
+
+    #[test]
+    fn shrink_gap() {
+        let mut s_buf = RawGapBuf::<String>::new();
+        s_buf.grow_gap(20);
+        assert_eq!(s_buf.gap_len(), 20);
+        assert!(s_buf.is_empty());
+        unsafe {
+            s_buf.start_ptr().write(String::from("Hi"));
+            s_buf.grow_start(1);
+            s_buf.end_ptr().sub(1).write(String::from("Bye"));
+            s_buf.grow_end(1);
+        };
+
+        s_buf.shrink_gap(10);
+
+        assert_eq!(s_buf.gap_len(), 8);
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.drop_in_place();
+
+        let mut s_buf = RawGapBuf::<String>::new();
+        s_buf.grow_gap(20);
+        assert_eq!(s_buf.gap_len(), 20);
+        assert!(s_buf.is_empty());
+        unsafe {
+            s_buf.start_ptr().write(String::from("Hi"));
+            s_buf.grow_start(1);
+            s_buf.end_ptr().sub(1).write(String::from("Bye"));
+            s_buf.grow_end(1);
+        };
+
+        s_buf.shrink_gap(18);
+
+        assert_eq!(s_buf.gap_len(), 0);
+        assert_eq!(s_buf.get_parts(), [&["Hi"], ["Bye"].as_slice()]);
+
+        s_buf.drop_in_place();
+    }
+
+    #[test]
+    #[should_panic]
+    fn shrink_gap_panics() {
+        let mut s_buf = RawGapBuf::<String>::new();
+        s_buf.grow_gap(20);
+        assert_eq!(s_buf.gap_len(), 20);
+        assert!(s_buf.is_empty());
+        unsafe {
+            s_buf.start_ptr().write(String::from("Hi"));
+            s_buf.grow_start(1);
+            s_buf.end_ptr().sub(1).write(String::from("Bye"));
+            s_buf.grow_end(1);
+        };
+
+        // in order to run this with miri we need to drop the T before the panic to avoid a memory
+        // leak
+        unsafe { s_buf.drop_t() };
+        s_buf.shrink_gap(19);
     }
 }
