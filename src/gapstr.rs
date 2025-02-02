@@ -54,6 +54,21 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
     }
 
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+
+    #[inline(always)]
+    pub fn gap_len(&self) -> usize {
+        self.buf.gap_len()
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&str; 2]> {
         let r = get_range(self.buf.len(), r)?;
