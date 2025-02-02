@@ -18,6 +18,7 @@ struct GrowingGapString<G: Grower<str>> {
 }
 
 impl<G: Grower<str>> GrowingGapString<G> {
+    /// Initialize an empty [`GrowingGapString`]
     #[inline]
     pub fn new() -> Self
     where
@@ -29,6 +30,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
     }
 
+    /// Initialize an empty [`GrowingGapString`] with a [`Grower`]
     #[inline]
     pub const fn with_grower(grower: G) -> Self {
         Self {
@@ -37,6 +39,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
     }
 
+    /// Initialize a [`GrowingGapString`] using multiple string slices and a gap size.
     #[inline]
     pub fn from_slices(start: &[&str], gap_size: usize, end: &[&str]) -> Self
     where
@@ -55,21 +58,27 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
     }
 
+    /// Returns the total length excluding the gap
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.buf.len()
     }
 
+    /// Returns the gaps length
     #[inline(always)]
     pub fn gap_len(&self) -> usize {
         self.buf.gap_len()
     }
 
+    /// Returns true if the buffer is empty
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Same as [`str::get`] but for gap buffers
+    ///
+    /// Returns None if the range is out of bounds or is not on a char boundary.
     #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&str; 2]> {
         let r = get_range(self.buf.len(), r)?;
@@ -81,6 +90,13 @@ impl<G: Grower<str>> GrowingGapString<G> {
         unsafe { Some([from_utf8_unchecked(start), from_utf8_unchecked(end)]) }
     }
 
+    /// Returns a contigious slice from the gap buffer
+    ///
+    /// The slice is constructed by shifting the elements to a position that leaves the requested
+    /// range as a single slice. This isn't recommended as it will move the gap and can have a
+    /// large cost in some cases. Prefer [`GrowingGapString::get`] wherever possible.
+    ///
+    /// Returns None if the range is out of bounds or is not on a char boundary.
     #[inline]
     pub fn get_slice<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
         let r = get_range(self.buf.len(), r)?;
@@ -91,6 +107,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         unsafe { Some(from_utf8_unchecked(s)) }
     }
 
+    /// Returns both sides of the gap buffer
     #[inline(always)]
     pub fn get_parts(&self) -> [&str; 2] {
         self.buf.get_parts().map(|s| unsafe {
@@ -116,6 +133,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
             || (r.start == r.end && self.buf.len() >= r.start)
     }
 
+    /// Insert a string at the provided position
+    ///
+    /// # Panics
+    /// If the provided position is greater than [`GrowingGapString::len`] or the position is not
+    /// on a char boundary.
     pub fn insert(&mut self, s: &str, at: usize) {
         assert!(
             self.buf.get(at).copied().is_some_and(u8_is_char_boundary) || self.buf.len() == at,
@@ -145,6 +167,16 @@ impl<G: Grower<str>> GrowingGapString<G> {
         };
     }
 
+    /// Equivalent to [`String::drain`] from the standard library
+    ///
+    /// Returns an iterator of char's, but unlike the standard library this shifts the gap to the
+    /// end of the provided range and shrinks the start slice. Rather than shifting on each
+    /// [`Iterator::next`] call, this shifts elements once and is cheap to use relative to
+    /// [`String::drain`].
+    ///
+    /// # Panics
+    /// If the provided range is out of bounds or the range start is greater than its end.
+    /// If the range does not lie on a char boundary.
     pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Chars {
         let r = get_range(self.buf.len(), r)
             .expect("range should never be out of bounds when draining");
@@ -156,6 +188,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
         s.chars()
     }
 
+    /// Equivalent to [`String::replace_range`] from the standard library
+    ///
+    /// # Panics
+    /// If the provided range is out of bounds or the range start is greater than its end.
+    /// If the range does not lie on a char boundary.
     pub fn replace_range<RB: RangeBounds<usize>>(&mut self, r: RB, s: &str) {
         let r = get_range(self.buf.len(), r).expect("out of bounds range for replace_range");
         assert!(self.is_get_char_boundary(r.start..r.end));
