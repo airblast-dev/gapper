@@ -95,6 +95,14 @@ impl<T> RawGapBuf<T> {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
         let total_len = start_len + end_len + gap_size;
+        assert!(Self::IS_ZST || total_len <= isize::MAX as usize);
+        if Self::IS_ZST {
+            return Self {
+                start: NonNull::slice_from_raw_parts(NonNull::dangling(), start_len),
+                end: NonNull::slice_from_raw_parts(NonNull::dangling(), end_len),
+            };
+        }
+
         let layout = Layout::array::<T>(total_len).expect("unable to initialize layout");
         if layout.size() == 0 {
             let dangling = NonNull::slice_from_raw_parts(NonNull::dangling(), 0);
@@ -326,7 +334,7 @@ impl<T> RawGapBuf<T> {
     pub const fn gap_len(&self) -> usize {
         // with ZST's there is no gap length, as such the subtraction below can overflow
         if Self::IS_ZST {
-            return 0;
+            return isize::MAX as usize - self.start_len() + self.end_len();
         }
         unsafe { self.end_ptr().offset_from(self.start_ptr()) as usize - self.start_len() }
     }
@@ -334,8 +342,9 @@ impl<T> RawGapBuf<T> {
     /// Returns the length of the total allocation
     #[inline(always)]
     pub const fn total_len(&self) -> usize {
-        // with ZST's there is no gap length, as such the addition below can overflow
         let len = self.len();
+        // with ZST's the gap length is usize::MAX, just return the number of items since we will
+        // not allocate anyway
         if Self::IS_ZST {
             return len;
         }
@@ -475,6 +484,13 @@ impl<T> RawGapBuf<T> {
             return;
         }
 
+        if Self::IS_ZST {
+            // SAFETY: for ZST's we don't have to actually move anything around
+            // the result of the logic below is pointless so just shift the gap
+            unsafe { self.shift_gap(self.start_len() as isize - (to as isize)) };
+            return;
+        }
+
         // this code is pretty ugly, but results in pretty clean assembly with relatively little
         // branching
         //
@@ -580,6 +596,9 @@ impl<T> RawGapBuf<T> {
     /// # Safety
     /// Accessing any T stored in [`RawGapBuf`] after this is called is UB.
     pub unsafe fn drop_t(&mut self) {
+        if Self::IS_ZST {
+            return;
+        }
         unsafe {
             self.start.drop_in_place();
             self.end.drop_in_place();
@@ -588,7 +607,7 @@ impl<T> RawGapBuf<T> {
 
     /// Reallocate the buffer with the provided gap size
     ///
-    /// Generally [`GrowingGapBuf::realloc_gap_at`] should be preferred instead as in most cases of
+    /// Generally [`RawGapBuf::grow_gap_at`] should be preferred instead as in most cases of
     /// reallocation, the goal is to allocate enough space to before an insertion is performed.
     ///
     /// This is allows growing or shrinking the gap without any knowledge of the insertions size
@@ -600,6 +619,15 @@ impl<T> RawGapBuf<T> {
 
     /// Reallocate the buffer and position the gap start at the provided position
     pub(crate) fn grow_gap_at(&mut self, by: usize, at: usize) {
+        assert!(self.len() >= at);
+        if Self::IS_ZST {
+            *self = Self {
+                start: NonNull::slice_from_raw_parts(NonNull::dangling(), at),
+                end: NonNull::slice_from_raw_parts(NonNull::dangling(), self.len() - at),
+            };
+            return;
+        }
+
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
