@@ -269,7 +269,6 @@ impl<G: Grower<str>> GrowingGapString<G> {
             }
             Ordering::Equal => {
                 // SAFETY: we just checked the bounds above
-                // TODO: we dont need get_slice here only used for convinience
                 unsafe { self.buf.get_slice(r.start..r.end).unwrap_unchecked() }
                     .copy_from_slice(s.as_bytes());
             }

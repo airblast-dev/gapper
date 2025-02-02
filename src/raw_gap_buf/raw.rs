@@ -712,7 +712,6 @@ impl<T> RawGapBuf<T> {
     }
 }
 
-// This implementation allows us to cover every single From implementation for a boxed slice
 impl<T> Clone for RawGapBuf<T>
 where
     T: Clone,
