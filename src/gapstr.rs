@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     marker::PhantomData,
-    mem::{transmute, MaybeUninit},
     ops::{Deref, DerefMut, Range, RangeBounds},
     ptr::NonNull,
     str::{from_utf8_unchecked, Chars},
