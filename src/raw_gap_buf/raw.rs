@@ -619,6 +619,7 @@ impl<T> RawGapBuf<T> {
 
     /// Reallocate the buffer and position the gap start at the provided position
     pub(crate) fn grow_gap_at(&mut self, by: usize, at: usize) {
+        // no need to check if size exceeds isize::MAX, layout returns error variant anyway
         assert!(self.len() >= at);
         if Self::IS_ZST {
             *self = Self {
