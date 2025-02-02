@@ -1,7 +1,7 @@
 use std::{
     ops::{Range, RangeBounds},
     ptr::NonNull,
-    str::from_utf8_unchecked,
+    str::{from_utf8_unchecked, Chars},
 };
 
 use crate::{
@@ -140,6 +140,18 @@ impl<G: Grower<str>> GrowingGapString<G> {
             self.buf.grow_start(s.len());
         };
     }
+
+    pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Chars {
+        let r = get_range(self.buf.len(), r)
+            .expect("range should never be out of bounds when draining");
+        assert!(self.is_get_char_boundary(r.start..r.end));
+        self.buf.move_gap_start_to(r.end);
+        let start_ptr = self.buf.get_parts()[0].as_ptr();
+        unsafe { self.buf.shrink_start(r.len()) };
+        let s = unsafe { from_utf8_unchecked(core::slice::from_raw_parts(start_ptr, r.len())) };
+        s.chars()
+    }
+
 }
 
 #[cfg(test)]
@@ -210,5 +222,23 @@ mod tests {
         assert_eq!(s_buf.get_slice(..).unwrap(), "HeByello");
         assert_eq!(s_buf.get_slice(1..7).unwrap(), "eByell");
         assert_eq!(s_buf.get_slice(1..9), None);
+    }
+
+    #[apply(grower_template)]
+    fn drain(g: TestGrower) {
+        let mut s_buf = GrowingGapString::with_grower(g);
+        s_buf.insert("Hello", 0);
+        assert_eq!(s_buf.drain(0..2).as_str(), "He");
+        assert_eq!(s_buf.len(), 3);
+        assert_eq!(s_buf.drain(0..2).as_str(), "ll");
+        assert_eq!(s_buf.len(), 1);
+        assert_eq!(s_buf.drain(0..1).as_str(), "o");
+        assert!(s_buf.is_empty());
+
+        let mut s_buf = GrowingGapString::with_grower(g);
+        s_buf.insert("Hello", 0);
+        let dr = s_buf.drain(..);
+        assert_eq!(dr.as_str(), "Hello");
+        assert!(s_buf.is_empty());
     }
 }
