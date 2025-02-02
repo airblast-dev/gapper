@@ -27,7 +27,7 @@ pub(crate) fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Option<Ran
     #[inline(never)]
     fn ret_none() {}
 
-    if start > end || max < end || max <= start {
+    if start > end || max < end || max < start {
         ret_none();
         None
     } else {
