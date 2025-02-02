@@ -29,7 +29,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     }
 
     #[inline]
-    pub fn with_grower(grower: G) -> Self {
+    pub const fn with_grower(grower: G) -> Self {
         Self {
             buf: RawGapBuf::new(),
             grower,
