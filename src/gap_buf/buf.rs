@@ -1,10 +1,6 @@
 use std::{marker::PhantomData, ops::RangeBounds, ptr::NonNull};
 
-use crate::{
-    grower::Grower,
-    raw_gap_buf::RawGapBuf,
-    utils::{get_parts_at, get_range},
-};
+use crate::{grower::Grower, raw_gap_buf::RawGapBuf, utils::get_range};
 
 use super::drain::Drain;
 
@@ -13,6 +9,12 @@ pub struct GrowingGapBuf<T, G: Grower<[T]>> {
     raw: RawGapBuf<T>,
     grower: G,
 }
+
+impl <T, G: Grower<[T]> + Default> Default for GrowingGapBuf<T, G> {
+    fn default() -> Self {
+        Self::new()
+    }
+} 
 
 impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// Initialize an empty gap buffer
