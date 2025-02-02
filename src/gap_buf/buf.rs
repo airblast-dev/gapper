@@ -104,7 +104,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// Calling this method can be expensive with a small gap, large range or disjointed multiple
     /// reads. [`RawGapBuf::get_range`] should be preferred whenever possible.
     #[inline(always)]
-    pub fn get_slice<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&[T]> {
+    pub fn get_slice<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&mut [T]> {
         let r = get_range(self.raw.len(), r)?;
         self.raw.get_slice(r)
     }

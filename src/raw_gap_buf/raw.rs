@@ -187,7 +187,7 @@ impl<T> RawGapBuf<T> {
     ///
     /// Returns None if the provided ranges are out of bounds.
     #[inline(always)]
-    pub fn get_slice(&mut self, r: Range<usize>) -> Option<&[T]> {
+    pub fn get_slice(&mut self, r: Range<usize>) -> Option<&mut [T]> {
         let r = get_range(self.len(), r)?;
         self.move_gap_out_of(r.start..r.end);
         debug_assert!(is_get_single(self.start_len(), r.start, r.end));
@@ -196,7 +196,7 @@ impl<T> RawGapBuf<T> {
         // the range. it is now safe to create a slice from the start with offset with a length of
         // the range
         Some(unsafe {
-            NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start).as_ref()
+            NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start).as_mut()
         })
     }
 
@@ -671,6 +671,10 @@ impl<T> RawGapBuf<T> {
         unsafe { old_end.copy_to(self.end_ptr(), end_len) };
         self.move_gap_start_to(at);
     }
+
+    pub fn shrink_gap(&mut self, by: usize) {
+        assert!(self.gap_len() >= by);
+    }
 }
 
 // This implementation allows us to cover every single From implementation for a boxed slice
@@ -1018,7 +1022,7 @@ mod tests {
         for i in 0..5 {
             assert_eq!(s_buf.get_range(i..i), Some([[].as_slice(), &[]]));
         }
-        assert_eq!(s_buf.get_range(5..5), None);
+        assert_eq!(s_buf.get_range(5..5).unwrap(), [&[], &[]]);
         assert_eq!(s_buf.get_range(6..6), None);
 
         // get single item as slice
