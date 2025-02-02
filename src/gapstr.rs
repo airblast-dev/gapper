@@ -94,7 +94,8 @@ impl<G: Grower<str>> GrowingGapString<G> {
                     .buf
                     .get(r.end)
                     .copied()
-                    .is_some_and(u8_is_char_boundary)) || (r.start == r.end && self.buf.len() >= r.start) 
+                    .is_some_and(u8_is_char_boundary))
+            || (r.start == r.end && self.buf.len() >= r.start)
     }
 
     pub fn insert(&mut self, s: &str, at: usize) {
@@ -172,5 +173,27 @@ mod tests {
         s_buf.insert("Bye", 2);
         assert_eq!(s_buf.get(..).unwrap(), ["HeBye", "llo"]);
         assert_eq!(s_buf.get(1..7).unwrap(), ["eBye", "ll"]);
+    }
+
+    #[apply(grower_template)]
+    fn get_slice(g: TestGrower) {
+        let mut s_buf = GrowingGapString::with_grower(g);
+        assert!(s_buf
+            .get(..)
+            .unwrap()
+            .map(|s| s.len())
+            .into_iter()
+            .all(|len| len == 0));
+        assert_eq!(s_buf.get(0..5), None);
+
+        s_buf.insert("Hello", 0);
+        assert_eq!(s_buf.get_slice(1..3).unwrap(), "el");
+        assert_eq!(s_buf.get_slice(2..4).unwrap(), "ll");
+        assert_eq!(s_buf.get_slice(2..5).unwrap(), "llo");
+
+        s_buf.insert("Bye", 2);
+        assert_eq!(s_buf.get_slice(..).unwrap(), "HeByello");
+        assert_eq!(s_buf.get_slice(1..7).unwrap(), "eByell");
+        assert_eq!(s_buf.get_slice(1..9), None);
     }
 }
