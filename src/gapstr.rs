@@ -92,9 +92,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
 
     #[inline(always)]
     pub fn get_parts(&self) -> [&str; 2] {
-        self.buf
-            .get_parts()
-            .map(|s| unsafe { from_utf8_unchecked(s) })
+        self.buf.get_parts().map(|s| unsafe {
+            // SAFETY: we do not allow the gap to be positioned between char boundaries both
+            // parts are always valid UTF-8 string slice
+            from_utf8_unchecked(s)
+        })
     }
 
     #[inline(always)]
@@ -118,10 +120,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
             self.buf.get(at).copied().is_some_and(u8_is_char_boundary) || self.buf.len() == at,
             "insertion should always be on a char boundary"
         );
-        let [start, end] = self
-            .buf
-            .get_parts()
-            .map(|s| unsafe { from_utf8_unchecked(s) });
+        let [start, end] = self.buf.get_parts().map(|s| unsafe {
+            // SAFETY: we do not allow the gap to be positioned between char boundaries both
+            // parts are always valid UTF-8 string slice
+            from_utf8_unchecked(s)
+        });
         let base_gap_size = self.grower.base_gap_size(start, end);
         if self.buf.gap_len() < s.len() {
             self.buf.grow_gap(base_gap_size + s.len());
