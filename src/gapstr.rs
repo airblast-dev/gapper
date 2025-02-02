@@ -7,13 +7,15 @@ use std::{
 };
 
 use crate::{
-    grower::Grower,
+    grower::{DefaultGrower, Grower},
     raw_gap_buf::RawGapBuf,
     utils::{get_range, u8_is_char_boundary},
 };
 
+pub type GapString = GrowingGapString<DefaultGrower>;
+
 #[derive(Clone)]
-struct GrowingGapString<G: Grower<str>> {
+pub struct GrowingGapString<G: Grower<str>> {
     buf: RawGapBuf<u8>,
     grower: G,
 }
@@ -298,7 +300,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     }
 }
 
-struct Drain<'a> {
+pub struct Drain<'a> {
     chars: Chars<'a>,
     __p: PhantomData<&'a u8>,
 }

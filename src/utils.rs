@@ -34,25 +34,3 @@ pub(crate) fn get_range<RB: RangeBounds<usize>>(max: usize, r: RB) -> Option<Ran
         Some(start..end)
     }
 }
-
-/// Checks which slice the position is located in and returns ((first[..at], first[at..]), last) or
-/// (first, (last[..at], last[at..]))
-///
-/// If the at position is before mid/after first, returns true
-#[inline(always)]
-pub(crate) fn get_parts_at<'a, T>(
-    mut first: &'a [T],
-    mut last: &'a [T],
-    at: usize,
-) -> (&'a [T], &'a [T], &'a [T], bool) {
-    let (mid, before_mid) = if first.len() > at {
-        let (f, mid) = first.split_at(at);
-        first = f;
-        (mid, true)
-    } else {
-        let (mid, l) = last.split_at(at - first.len());
-        last = l;
-        (mid, false)
-    };
-    (first, mid, last, before_mid)
-}

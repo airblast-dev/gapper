@@ -1,12 +1,12 @@
 use std::{
     alloc::{self, handle_alloc_error, Layout},
-    mem::{size_of, size_of_val, MaybeUninit},
+    mem::{size_of, MaybeUninit},
     num::NonZeroUsize,
     ops::Range,
     ptr::NonNull,
 };
 
-use crate::utils::{get_parts_at, get_range, is_get_single};
+use crate::utils::{get_range, is_get_single};
 
 /// Similar to RawVec used in the standard library, this is our inner struct
 ///
@@ -48,6 +48,7 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline]
+    #[cfg(test)]
     pub fn new_with<const S: usize, const E: usize>(
         mut start: [T; S],
         gap_size: usize,
@@ -582,6 +583,7 @@ impl<T> RawGapBuf<T> {
     }
 
     /// Drop's Self, calling the drop code of the stored T
+    #[cfg(test)]
     pub fn drop_in_place(mut self) {
         // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
         // access is performed to the inner T's
