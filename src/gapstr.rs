@@ -1,6 +1,8 @@
 use std::{
     cmp::Ordering,
-    ops::{Range, RangeBounds},
+    marker::PhantomData,
+    mem::{transmute, MaybeUninit},
+    ops::{Deref, Range, RangeBounds},
     ptr::NonNull,
     str::{from_utf8_unchecked, Chars},
 };
@@ -181,28 +183,40 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// # Panics
     /// If the provided range is out of bounds or the range start is greater than its end.
     /// If the range does not lie on a char boundary.
-    pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Chars {
+    pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Drain {
         let r = get_range(self.buf.len(), r)
             .expect("range should never be out of bounds when draining");
         assert!(self.is_get_char_boundary(r.start..r.end));
 
-        let [start, end] = self
-            .buf
-            .get_parts()
-            .map(|s| unsafe { from_utf8_unchecked(s) });
+        {
+            let [start, end] = self
+                .buf
+                .get_parts()
+                .map(|s| unsafe { from_utf8_unchecked(s) });
 
-        let max_gap_size = self.grower.max_gap_size(start, end);
-        let gap_len = self.gap_len();
-        if gap_len > max_gap_size {
-            self.shrink_gap(gap_len - max_gap_size);
+            let max_gap_size = self.grower.max_gap_size(start, end);
+            let gap_len = self.gap_len();
+            if gap_len > max_gap_size {
+                self.shrink_gap(gap_len - max_gap_size);
+            }
         }
 
         self.buf.move_gap_start_to(r.end);
-        let start_ptr = self.buf.get_parts()[0].as_ptr();
+        // SAFETY: 
+        // - s is valid as long as self isn't mutated which we dissallow via the PhantomData in Drain
+        // - The start slice is fully initialized and we have validated the range above
+        //
+        // WARNING: until we return the Drain, we are technically allowed to call mutable methods,
+        // but calling any method with &mut self is unsound if it moves anything inside the
+        // allocation. When editing this code make sure that no moves or copies are made after the
+        // string variable is initialized.
         unsafe {
+            let s: &str = from_utf8_unchecked(self.buf.start().as_ref().get_unchecked(r.start..r.end));
             self.buf.shrink_start(r.len());
-            let s = from_utf8_unchecked(core::slice::from_raw_parts(start_ptr, r.len()));
-            s.chars()
+            Drain {
+                chars: s.chars(),
+                __p: PhantomData,
+            }
         }
     }
 
@@ -274,6 +288,18 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// explicitly.
     pub fn shrink_gap(&mut self, by: usize) {
         self.buf.shrink_gap(by);
+    }
+}
+
+struct Drain<'a> {
+    chars: Chars<'a>,
+    __p: PhantomData<&'a u8>,
+}
+
+impl<'a> Deref for Drain<'a> {
+    type Target = Chars<'a>;
+    fn deref(&self) -> &Self::Target {
+        &self.chars
     }
 }
 
