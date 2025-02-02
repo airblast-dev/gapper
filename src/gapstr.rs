@@ -3,7 +3,7 @@ use std::{
     marker::PhantomData,
     ops::{Deref, DerefMut, Range, RangeBounds},
     ptr::NonNull,
-    str::{from_utf8_unchecked, Chars},
+    str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
 
 use crate::{
@@ -99,6 +99,20 @@ impl<G: Grower<str>> GrowingGapString<G> {
         unsafe { Some([from_utf8_unchecked(start), from_utf8_unchecked(end)]) }
     }
 
+    /// Same as [`str::get_mut`] but for gap buffers
+    ///
+    /// Returns None if the range is out of bounds or is not on a char boundary.
+    #[inline]
+    pub fn get_mut<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<[&mut str; 2]> {
+        let r = get_range(self.buf.len(), r)?;
+        if !self.is_get_char_boundary(r.start..r.end) {
+            return None;
+        }
+
+        let [start, end] = self.buf.get_range_mut(r)?;
+        unsafe { Some([from_utf8_unchecked_mut(start), from_utf8_unchecked_mut(end)]) }
+    }
+
     /// Returns a contigious slice from the gap buffer
     ///
     /// The slice is constructed by shifting the elements to a position that leaves the requested
@@ -117,10 +131,34 @@ impl<G: Grower<str>> GrowingGapString<G> {
         unsafe { Some(from_utf8_unchecked(s)) }
     }
 
+    /// Returns a contigious slice from the gap buffer
+    ///
+    /// Same as [`GrowingGapString::get_slice`] but returns a mutable reference.
+    #[inline]
+    pub fn get_slice_mut<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&mut str> {
+        let r = get_range(self.buf.len(), r)?;
+        if !self.is_get_char_boundary(r.start..r.end) {
+            return None;
+        }
+        let s = self.buf.get_slice(r)?;
+        // SAFETY: we have checked if the range is on a char boundary above
+        unsafe { Some(from_utf8_unchecked_mut(s)) }
+    }
+
     /// Returns both sides of the gap buffer
     #[inline(always)]
     pub fn get_parts(&self) -> [&str; 2] {
         self.buf.get_parts().map(|s| unsafe {
+            // SAFETY: we do not allow the gap to be positioned between char boundaries both
+            // parts are always valid UTF-8 string slice
+            from_utf8_unchecked(s)
+        })
+    }
+
+    /// Returns both sides of the gap buffer as mutable slices
+    #[inline(always)]
+    pub fn get_parts_mut(&mut self) -> [&str; 2] {
+        self.buf.get_parts_mut().map(|s| unsafe {
             // SAFETY: we do not allow the gap to be positioned between char boundaries both
             // parts are always valid UTF-8 string slice
             from_utf8_unchecked(s)

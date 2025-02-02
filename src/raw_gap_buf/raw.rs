@@ -229,6 +229,34 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
+    pub fn get_range_mut(&mut self, r: Range<usize>) -> Option<[&mut [T]; 2]> {
+        let len = self.len();
+        let r = get_range(len, r)?;
+
+        let (start_pos, end_pos) = (self.start_with_offset(r.start), self.end_with_offset(r.end));
+
+        if is_get_single(self.start_len(), start_pos, end_pos) {
+            // TODO: return if it was the left or right part correctly
+            // code calling this method should handle both slices gracefully but we should still
+            // aim for consistency within the API
+            let single = unsafe {
+                NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start)
+                    .as_mut()
+            };
+            return Some([single, &mut []]);
+        }
+
+        let start_len = self.start_len();
+        let [start, end] = self.get_parts_mut();
+        unsafe {
+            Some([
+                start.get_unchecked_mut(r.start..),
+                end.get_unchecked_mut(0..r.end - start_len),
+            ])
+        }
+    }
+
+    #[inline(always)]
     #[allow(clippy::wrong_self_convention)]
     pub fn to_slice(&mut self) -> &[T] {
         self.move_gap_out_of(0..self.len());
