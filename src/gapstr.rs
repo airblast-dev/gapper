@@ -1,7 +1,7 @@
 use std::{
     ops::{Range, RangeBounds},
     ptr::NonNull,
-    str::{from_utf8, from_utf8_unchecked},
+    str::from_utf8_unchecked,
 };
 
 use crate::{
