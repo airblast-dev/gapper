@@ -565,10 +565,7 @@ impl<T> RawGapBuf<T> {
     /// minimal copies.
     #[inline(always)]
     pub fn move_gap_out_of(&mut self, r: Range<usize>) {
-        // i dont like returning an option bool here
-        // maybe require the higher level type to check for the single get case?
         assert!(self.total_len() >= r.end && r.start <= r.end);
-        // shift the gap out of the specified range whilst doing minimal amount of copying
         if r.start > self.start_len() || r.end <= self.start_len() {
             return;
         }
