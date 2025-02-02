@@ -629,8 +629,9 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
-        let layout = Layout::array::<T>(start_len + gap_len + end_len)
-            .expect("unable to initialize layout for realloc");
+        // SAFETY: this has been already validated during allocation, no need to double check
+        let layout =
+            unsafe { Layout::array::<T>(start_len + gap_len + end_len).unwrap_unchecked() };
         let new_layout = Layout::array::<T>(start_len + end_len + gap_len + by)
             .expect("unable to initialize layout for realloc");
         if new_layout.size() == 0 {
