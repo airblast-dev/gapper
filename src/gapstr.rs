@@ -18,6 +18,12 @@ struct GrowingGapString<G: Grower<str>> {
     grower: G,
 }
 
+impl<G: Grower<str> + Default> Default for GrowingGapString<G> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<G: Grower<str>> GrowingGapString<G> {
     /// Initialize an empty [`GrowingGapString`]
     #[inline]
