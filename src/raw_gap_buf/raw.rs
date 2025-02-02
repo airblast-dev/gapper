@@ -173,6 +173,15 @@ impl<T> RawGapBuf<T> {
         unsafe { Some((self.start_ptr().add(index)).as_ref()) }
     }
 
+    #[inline(always)]
+    pub fn get_mut(&mut self, mut index: usize) -> Option<&mut T> {
+        if index >= self.len() {
+            return None;
+        }
+        index = self.start_with_offset(index);
+        unsafe { Some((self.start_ptr().add(index)).as_mut()) }
+    }
+
     /// Get a slice of the values in the range
     ///
     /// Shifts the items in the buffer to provide a contiguous slice for the provided range.

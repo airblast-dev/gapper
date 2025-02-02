@@ -10,11 +10,11 @@ pub struct GrowingGapBuf<T, G: Grower<[T]>> {
     grower: G,
 }
 
-impl <T, G: Grower<[T]> + Default> Default for GrowingGapBuf<T, G> {
+impl<T, G: Grower<[T]> + Default> Default for GrowingGapBuf<T, G> {
     fn default() -> Self {
         Self::new()
     }
-} 
+}
 
 impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// Initialize an empty gap buffer
@@ -83,6 +83,14 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<&T> {
         self.raw.get(index)
+    }
+
+    /// Get the value at the provided index
+    ///
+    /// Same as [`GrowingGapBuf::get`] but returns mutable reference to T.
+    #[inline(always)]
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        self.raw.get_mut(index)
     }
 
     /// Get slices of the values in the range
