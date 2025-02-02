@@ -197,12 +197,13 @@ impl<G: Grower<str>> GrowingGapString<G> {
             let max_gap_size = self.grower.max_gap_size(start, end);
             let gap_len = self.gap_len();
             if gap_len > max_gap_size {
-                self.shrink_gap(gap_len - max_gap_size);
+                let base_gap_size = self.grower.base_gap_size(start, end);
+                self.shrink_gap(gap_len - max_gap_size.min(base_gap_size));
             }
         }
 
         self.buf.move_gap_start_to(r.end);
-        // SAFETY: 
+        // SAFETY:
         // - s is valid as long as self isn't mutated which we dissallow via the PhantomData in Drain
         // - The start slice is fully initialized and we have validated the range above
         //
@@ -211,7 +212,8 @@ impl<G: Grower<str>> GrowingGapString<G> {
         // allocation. When editing this code make sure that no moves or copies are made after the
         // string variable is initialized.
         unsafe {
-            let s: &str = from_utf8_unchecked(self.buf.start().as_ref().get_unchecked(r.start..r.end));
+            let s: &str =
+                from_utf8_unchecked(self.buf.start().as_ref().get_unchecked(r.start..r.end));
             self.buf.shrink_start(r.len());
             Drain {
                 chars: s.chars(),
@@ -267,6 +269,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
             }
             Ordering::Equal => {
                 // SAFETY: we just checked the bounds above
+                // TODO: we dont need get_slice here only used for convinience
                 unsafe { self.buf.get_slice(r.start..r.end).unwrap_unchecked() }
                     .copy_from_slice(s.as_bytes());
             }
