@@ -55,20 +55,8 @@ impl<T> RawGapBuf<T> {
         mut end: [T; E],
     ) -> Self {
         let total_len = start.len() + end.len() + gap_size;
-        let layout =
-            Layout::array::<T>(total_len).expect("unable to initialize layout for allocation");
-        if layout.size() == 0 {
-            let dangling = NonNull::slice_from_raw_parts(NonNull::dangling(), 0);
-            return Self {
-                start: dangling,
-                end: dangling,
-            };
-        }
-        // SAFETY: we checked if our size is zero above, it is now safe to allocate
-        let Some(alloc_ptr) = NonNull::new(unsafe { alloc::alloc(layout) }).map(NonNull::cast::<T>)
-        else {
-            handle_alloc_error(layout)
-        };
+        let alloc_ptr =
+            NonNull::from(Box::leak(Box::<[T]>::new_uninit_slice(total_len))).cast::<T>();
         unsafe {
             alloc_ptr.copy_from_nonoverlapping(NonNull::from(&mut start).cast::<T>(), S);
             alloc_ptr
@@ -97,27 +85,16 @@ impl<T> RawGapBuf<T> {
         let end_len = end.iter().map(|s| s.len()).sum();
         let total_len: usize = start_len + end_len + gap_size;
 
-        if Self::IS_ZST {
+        if Self::IS_ZST || total_len == 0 {
+            let dangling = NonNull::dangling();
             return Self {
-                start: NonNull::slice_from_raw_parts(NonNull::dangling(), start_len),
-                end: NonNull::slice_from_raw_parts(NonNull::dangling(), end_len),
+                start: NonNull::slice_from_raw_parts(dangling, start_len),
+                end: NonNull::slice_from_raw_parts(dangling, end_len),
             };
         }
 
-        let layout = Layout::array::<T>(total_len).expect("unable to initialize layout");
-        if layout.size() == 0 {
-            let dangling = NonNull::slice_from_raw_parts(NonNull::dangling(), 0);
-            return Self {
-                start: dangling,
-                end: dangling,
-            };
-        }
-
-        // SAFETY: we checked if our size is zero above, it is now safe to allocate
-        let Some(alloc_ptr) = NonNull::new(unsafe { alloc::alloc(layout) }).map(NonNull::cast::<T>)
-        else {
-            handle_alloc_error(layout);
-        };
+        let alloc_ptr =
+            NonNull::from(Box::leak(Box::<[T]>::new_uninit_slice(total_len))).cast::<T>();
 
         let mut i = 0;
         let mut offset = 0;
@@ -659,9 +636,7 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
-        // SAFETY: this has been already validated during allocation, no need to double check
-        let layout =
-            unsafe { Layout::array::<T>(start_len + gap_len + end_len).unwrap_unchecked() };
+        let layout = self.layout();
         let new_layout = Layout::array::<T>(start_len + end_len + gap_len + by)
             .expect("unable to initialize layout for realloc");
         if new_layout.size() == 0 {
@@ -717,8 +692,7 @@ impl<T> RawGapBuf<T> {
             // SAFETY: both are valid for enough read and writes
             self.end_ptr().copy_to(gap_ptr, self.end_len());
 
-            // SAFETY: we already validated the layout during allocation
-            let layout = Layout::array::<T>(total_len).unwrap_unchecked();
+            let layout = self.layout();
             // SAFETY: the pointer is properly aligned and does point to allocated memory as we have
             // checked the size above
             let Some(new_ptr) = NonNull::new(alloc::realloc(
@@ -739,6 +713,11 @@ impl<T> RawGapBuf<T> {
             self.end = NonNull::slice_from_raw_parts(new_ptr.add(start_len + gap_len - by), end_len)
         }
     }
+
+    fn layout(&self) -> Layout {
+        // SAFETY: we have already validated the layout during allocation
+        unsafe { Layout::array::<T>(self.total_len()).unwrap_unchecked() }
+    }
 }
 
 impl<T> Clone for RawGapBuf<T>
@@ -749,28 +728,22 @@ where
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
-        let layout = Layout::array::<T>(start_len + gap_len + end_len)
-            .expect("unable to initialize layout for allocation");
-        let Some(alloc_ptr) = NonNull::new(unsafe { alloc::alloc(layout) }).map(NonNull::cast::<T>)
-        else {
-            handle_alloc_error(layout);
-        };
-        unsafe {
-            let [start, end] = self.get_parts();
-            for (i, item) in start.iter().enumerate() {
-                alloc_ptr.add(i).write(item.clone());
-            }
+        let mut alloc_box = Box::<[T]>::new_uninit_slice(self.total_len());
+        let [start, end] = self.get_parts();
+        for (i, item) in start.iter().enumerate() {
+            alloc_box[i].write(item.clone());
+        }
 
-            let end_start = alloc_ptr.add(start_len + gap_len);
+        let end_slice = &mut alloc_box[start_len + gap_len..];
+        for (i, item) in end.iter().enumerate() {
+            end_slice[i].write(item.clone());
+        }
+        let end_ptr = NonNull::from(&mut *end_slice).cast::<T>();
 
-            for (i, item) in end.iter().enumerate() {
-                end_start.add(i).write(item.clone());
-            }
-
-            Self {
-                start: NonNull::slice_from_raw_parts(alloc_ptr, start_len),
-                end: NonNull::slice_from_raw_parts(end_start, end_len),
-            }
+        let leaked = NonNull::from(Box::leak(alloc_box)).cast::<T>();
+        Self {
+            start: NonNull::slice_from_raw_parts(leaked, start_len),
+            end: NonNull::slice_from_raw_parts(end_ptr, end_len),
         }
     }
 }
@@ -800,17 +773,13 @@ impl<T> Drop for RawGapBuf<T> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            let total_len = self.total_len();
-            if total_len == 0 {
-                return;
-            }
-
-            // SAFETY: The pointer is guaranteed to be allocated by the global allocator, and the length
-            // provided is the exact value that was used whilst allocating.
-            alloc::dealloc(
-                self.start.as_ptr() as *mut u8,
-                Layout::array::<T>(total_len).expect("unable to intialize layout for allocation"),
-            );
+            drop(Box::<[MaybeUninit<T>]>::from_raw(
+                NonNull::slice_from_raw_parts(
+                    self.start_ptr().cast::<MaybeUninit<T>>(),
+                    self.total_len(),
+                )
+                .as_ptr(),
+            ));
         }
     }
 }
