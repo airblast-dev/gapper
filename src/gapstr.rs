@@ -281,13 +281,12 @@ impl<G: Grower<str>> GrowingGapString<G> {
         match r.len().cmp(&s.len()) {
             Ordering::Greater => {
                 self.buf.move_gap_start_to(r.end);
+                // SAFETY: we just checked the bounds above
+                self.buf.get_parts_mut()[0][r.start..r.start + s.len()]
+                    .copy_from_slice(s.as_bytes());
+                // SAFETY: we checked the bounds above and r.len is greater than s.len so no
+                // overflow can occur
                 unsafe {
-                    // SAFETY: we just checked the bounds above
-                    self.buf.get_parts_mut()[0]
-                        .get_unchecked_mut(r.start..r.start + s.len())
-                        .copy_from_slice(s.as_bytes());
-                    // SAFETY: we checked the bounds above and r.len is greater than s.len so no
-                    // overflow can occur
                     self.buf.shrink_start(r.len() - s.len());
                 }
             }
@@ -307,11 +306,8 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 // overlapping
                 // we have shifted the gap to the end of the range and we are not overwriting the
                 // contents of the end slice
+                self.buf.get_parts_mut()[0].copy_from_slice(s.as_bytes());
                 unsafe {
-                    self.buf
-                        .start_ptr()
-                        .add(r.start)
-                        .copy_from_nonoverlapping(NonNull::from(s).cast::<u8>(), s.len());
                     self.buf.grow_start(needed_space);
                 };
             }
