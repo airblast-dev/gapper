@@ -31,11 +31,13 @@ impl<T> Iterator for Drain<'_, T> {
         let ptr = self.ptr.cast::<T>();
         // SAFETY: we have checked the remaining length above
         // it is now guaranteed that we at least have one value stored
-        let t = unsafe { ptr.read() };
-        // SAFETY: we have read the last value in the slice, to avoid a double drop we shrink the
-        // length of our slice
-        self.ptr = NonNull::slice_from_raw_parts(unsafe { ptr.add(1) }, len - 1);
-        Some(t)
+        unsafe {
+            let t = ptr.read();
+            // SAFETY: we have read the last value in the slice, to avoid a double drop we shrink the
+            // length of our slice
+            self.ptr = NonNull::slice_from_raw_parts(ptr.add(1), len - 1);
+            Some(t)
+        }
     }
 
     fn nth(&mut self, mut n: usize) -> Option<Self::Item>
@@ -54,16 +56,18 @@ impl<T> Iterator for Drain<'_, T> {
         let ptr = self.ptr.cast::<T>();
 
         // go to the requested value and read it
-        let t = unsafe { ptr.add(n).read() };
-        // drop all values until the one that was read
-        unsafe { NonNull::slice_from_raw_parts(ptr, n).drop_in_place() };
+        unsafe {
+            let t = ptr.add(n).read();
+            // drop all values until the one that was read
+            NonNull::slice_from_raw_parts(ptr, n).drop_in_place();
 
-        // we minimally always drop one value in this branch
-        // to account for the item that was read, and the ones that were dropped readjust the slice
-        // start and length
-        n += 1;
-        self.ptr = NonNull::slice_from_raw_parts(unsafe { ptr.add(n) }, len - n);
-        Some(t)
+            // we minimally always drop one value in this branch
+            // to account for the item that was read, and the ones that were dropped readjust the slice
+            // start and length
+            n += 1;
+            self.ptr = NonNull::slice_from_raw_parts(ptr.add(n), len - n);
+            Some(t)
+        }
     }
 
     fn count(mut self) -> usize
