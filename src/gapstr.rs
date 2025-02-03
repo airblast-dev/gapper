@@ -211,7 +211,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
         self.buf.move_gap_start_to(at);
 
-        let (_, gap, _) = self.buf.as_slices_mut();
+        let gap = self.buf.spare_capacity_mut();
 
         gap[0..s.len()].copy_from_slice(must_cast_slice(s.as_bytes()));
 
@@ -254,7 +254,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
             self.buf.shrink_start(r.len());
 
             let s: &str = from_utf8_unchecked(transmute::<&[std::mem::MaybeUninit<u8>], &[u8]>(
-                &self.buf.as_slices().1[0..r.len()],
+                &self.buf.spare_capacity_mut()[0..r.len()],
             ));
 
             s

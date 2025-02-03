@@ -214,7 +214,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<Drain<'_, T>> {
         let r = get_range(self.raw.len(), r)?;
         self.raw.move_gap_start_to(r.end);
-        let start = self.raw.as_slices_mut().0;
+        let start = &mut self.raw.get_parts_mut()[0];
         let ret = Some(Drain {
             ptr: NonNull::from(&mut start[r.start..r.end]),
             __p: PhantomData,
