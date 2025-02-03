@@ -224,15 +224,13 @@ impl<G: Grower<str>> GrowingGapString<G> {
 
     /// Equivalent to [`String::drain`] from the standard library
     ///
-    /// Returns an iterator of char's, but unlike the standard library this shifts the gap to the
-    /// end of the provided range and shrinks the start slice. Rather than shifting on each
-    /// [`Iterator::next`] call, this shifts elements once and is cheap to use relative to
-    /// [`String::drain`].
+    /// Shifts the gap's start position to the end of the range, and returns the string slice at
+    /// the provided range.
     ///
     /// # Panics
     /// If the provided range is out of bounds or the range start is greater than its end.
     /// If the range does not lie on a char boundary.
-    pub fn remove<'a, RB: RangeBounds<usize>>(&'a mut self, r: RB) -> &'a str {
+    pub fn remove<RB: RangeBounds<usize>>(&mut self, r: RB) -> &str {
         let r = get_range(self.buf.len(), r)
             .expect("range should never be out of bounds when draining");
         assert!(self.is_get_char_boundary(r.start..r.end));
@@ -254,14 +252,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         self.buf.move_gap_start_to(r.end);
         unsafe {
             self.buf.shrink_start(r.len());
-            // SAFETY:
-            // - s is valid as long as self isn't mutated which we dissallow via the PhantomData in Drain
-            // - The start slice is fully initialized and we have validated the range above
-            //
-            // WARNING: until we return the Drain, we are technically allowed to call mutable methods,
-            // but calling any method with &mut self is unsound if it moves anything inside the
-            // allocation. When editing this code make sure that no moves or copies are made after the
-            // string variable is initialized.
+
             let s: &str = from_utf8_unchecked(transmute::<&[std::mem::MaybeUninit<u8>], &[u8]>(
                 &self.buf.as_slices().1[0..r.len()],
             ));
