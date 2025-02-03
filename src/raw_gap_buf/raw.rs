@@ -165,21 +165,29 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub fn get(&self, mut index: usize) -> Option<&T> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len() {
             return None;
         }
-        index = self.start_with_offset(index);
-        unsafe { Some((self.start_ptr().add(index)).as_ref()) }
+        let [start, end] = self.get_parts();
+        if index >= start.len() {
+            Some(&end[index - start.len()])
+        } else {
+            Some(&start[index])
+        }
     }
 
     #[inline(always)]
-    pub fn get_mut(&mut self, mut index: usize) -> Option<&mut T> {
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index >= self.len() {
             return None;
         }
-        index = self.start_with_offset(index);
-        unsafe { Some((self.start_ptr().add(index)).as_mut()) }
+        let [start, end] = self.get_parts_mut();
+        if index >= start.len() {
+            Some(&mut end[index - start.len()])
+        } else {
+            Some(&mut start[index])
+        }
     }
 
     /// Get a slice of the values in the range
@@ -201,13 +209,13 @@ impl<T> RawGapBuf<T> {
         let r = get_range(self.len(), r)?;
         self.move_gap_out_of(r.start..r.end);
         debug_assert!(is_get_single(self.start_len(), r.start, r.end));
-        let start_pos = self.start_with_offset(r.start);
-        // SAFETY: get_range has validated the provided range and the gap has been moved out of
-        // the range. it is now safe to create a slice from the start with offset with a length of
-        // the range
-        Some(unsafe {
-            NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start).as_mut()
-        })
+        let start_len = self.start_len();
+        let [start, end] = self.get_parts_mut();
+        if r.start >= start_len {
+            Some(&mut end[r.start - start_len..r.len()])
+        } else {
+            Some(&mut start[r.start..r.end])
+        }
     }
 
     #[inline(always)]
@@ -215,26 +223,18 @@ impl<T> RawGapBuf<T> {
         let len = self.len();
         let r = get_range(len, r)?;
 
-        let (start_pos, end_pos) = (self.start_with_offset(r.start), self.end_with_offset(r.end));
-
-        if is_get_single(self.start_len(), start_pos, end_pos) {
-            // TODO: return if it was the left or right part correctly
-            // code calling this method should handle both slices gracefully but we should still
-            // aim for consistency within the API
-            let single = unsafe {
-                NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start)
-                    .as_ref()
-            };
-            return Some([single, &[]]);
+        if is_get_single(self.start_len(), r.start, r.end) {
+            let [start, end] = self.get_parts();
+            if r.start >= self.start_len() {
+                let start_len = self.start_len();
+                return Some([&[], &end[r.start - start_len..r.end - start_len]]);
+            } else {
+                return Some([&start[r.start..r.end], &[]]);
+            }
         }
 
         let [start, end] = self.get_parts();
-        unsafe {
-            Some([
-                start.get_unchecked(r.start..),
-                end.get_unchecked(0..r.end - self.start_len()),
-            ])
-        }
+        Some([&start[r.start..], &end[0..r.end - self.start_len()]])
     }
 
     #[inline(always)]
@@ -242,27 +242,17 @@ impl<T> RawGapBuf<T> {
         let len = self.len();
         let r = get_range(len, r)?;
 
-        let (start_pos, end_pos) = (self.start_with_offset(r.start), self.end_with_offset(r.end));
-
-        if is_get_single(self.start_len(), start_pos, end_pos) {
-            // TODO: return if it was the left or right part correctly
-            // code calling this method should handle both slices gracefully but we should still
-            // aim for consistency within the API
-            let single = unsafe {
-                NonNull::slice_from_raw_parts(self.start_ptr().add(start_pos), r.end - r.start)
-                    .as_mut()
-            };
-            return Some([single, &mut []]);
-        }
-
         let start_len = self.start_len();
         let [start, end] = self.get_parts_mut();
-        unsafe {
-            Some([
-                start.get_unchecked_mut(r.start..),
-                end.get_unchecked_mut(0..r.end - start_len),
-            ])
+        if is_get_single(start_len, r.start, r.end) {
+            if r.start >= start_len {
+                return Some([&mut [], &mut end[r.start - start_len..r.end - start_len]]);
+            } else {
+                return Some([&mut start[r.start..r.end], &mut []]);
+            }
         }
+
+        Some([&mut start[r.start..], &mut end[0..r.end - start_len]])
     }
 
     #[inline(always)]
@@ -1099,8 +1089,8 @@ mod tests {
         assert_eq!(s_buf.get_range(6..6), None);
 
         // get single item as slice
-        assert_eq!(s_buf.get_range(3..4), Some([[4].as_slice(), &[]]));
-        assert_eq!(s_buf.get_range(4..5), Some([[5].as_slice(), &[]]));
+        assert_eq!(s_buf.get_range(3..4), Some([[].as_slice(), &[4]]));
+        assert_eq!(s_buf.get_range(4..5), Some([[].as_slice(), &[5]]));
         assert_eq!(s_buf.get_range(5..6), None);
 
         // get items across the gap
