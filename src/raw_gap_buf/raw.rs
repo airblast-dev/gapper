@@ -453,7 +453,7 @@ impl<T> RawGapBuf<T> {
                 "cannot grow the end slice when the grow overlaps with the start slice"
             );
         }
-        let t_ptr = self.end_ptr().sub(by);
+        let t_ptr = unsafe { self.end_ptr().sub(by) };
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len + by);
     }
 
