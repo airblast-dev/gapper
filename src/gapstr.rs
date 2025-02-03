@@ -6,6 +6,8 @@ use std::{
     str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
 
+use bytemuck::{cast_slice, must_cast, must_cast_slice};
+
 use crate::{
     grower::{DefaultGrower, Grower},
     raw_gap_buf::RawGapBuf,
@@ -191,6 +193,9 @@ impl<G: Grower<str>> GrowingGapString<G> {
             self.buf.get(at).copied().is_some_and(u8_is_char_boundary) || self.buf.len() == at,
             "insertion should always be on a char boundary"
         );
+        // polonius moment
+        // can't use [`GrowingGapString::get_parts`] as borrow checker can't infer that the grower
+        // field and slices are unrelated in regards to mutability.
         let [start, end] = self.buf.get_parts().map(|s| unsafe {
             // SAFETY: we do not allow the gap to be positioned between char boundaries both
             // parts are always valid UTF-8 string slice
@@ -205,13 +210,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
         self.buf.move_gap_start_to(at);
 
+        let [_, gap, _] = self.buf.get_parts_as_uninit();
+
+        gap[0..s.len()].copy_from_slice(must_cast_slice(s.as_bytes()));
+
         unsafe {
-            // SAFETY: the references do not overlap and both are correctly aligned
-            // we have allocated enough space above
-            self.buf
-                .spare_capacity_mut()
-                .cast::<u8>()
-                .copy_from_nonoverlapping(NonNull::from(s).cast::<u8>(), s.len());
             // SAFETY: we have initialized the gaps first s.len items it is now safe to grow the
             // start
             self.buf.grow_start(s.len());
@@ -314,7 +317,9 @@ impl<G: Grower<str>> GrowingGapString<G> {
             }
             Ordering::Equal => {
                 // SAFETY: we just checked the bounds above
-                unsafe { self.buf.get_slice(r.start..r.end).unwrap_unchecked() }
+                self.buf
+                    .get_slice(r.start..r.end)
+                    .expect("we checked the range bounds above, this should never panic")
                     .copy_from_slice(s.as_bytes());
             }
         }

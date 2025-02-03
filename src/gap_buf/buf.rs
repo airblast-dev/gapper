@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ops::RangeBounds, ptr::NonNull};
+use std::{marker::PhantomData, mem::MaybeUninit, ops::RangeBounds, ptr::NonNull};
 
 use crate::{grower::Grower, raw_gap_buf::RawGapBuf, utils::get_range};
 
@@ -166,9 +166,8 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
             self.raw.move_gap_start_to(at);
         }
 
-        // SAFETY: the target location should never have a value as it is in the gap
+        self.raw.spare_capacity_mut()[0].write(val);
         unsafe {
-            self.raw.spare_capacity_mut().cast::<T>().write(val);
             // we have written the value and it is now safe to grow the start
             self.raw.grow_start(1);
         }
@@ -191,14 +190,11 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
                 self.grow_gap(hint.max(1));
             }
 
-            // SAFETY: we have moved the gap to the first T position in the gap, each item we add
+            // we have moved the gap to the first T position in the gap, each item we add
             // shifts it by one. we have also growed the gap to account for the insert.
             // It is now safe to write the T and grow our start slice
+            self.raw.spare_capacity_mut()[0].write(item);
             unsafe {
-                self.raw
-                    .start_ptr_mut()
-                    .add(self.raw.start_len())
-                    .write(item);
                 // The grow is intentionally adjusted on every iteration as we are calling user code which
                 // could panic and leave our buffer in an invalid state.
                 self.raw.grow_start(1);

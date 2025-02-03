@@ -1,6 +1,6 @@
 use std::{
     alloc::{self, handle_alloc_error, Layout},
-    mem::{size_of, MaybeUninit},
+    mem::{size_of, transmute, MaybeUninit},
     num::NonZeroUsize,
     ops::Range,
     ptr::NonNull,
@@ -139,6 +139,16 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub const fn get_parts_mut(&mut self) -> [&mut [T]; 2] {
         unsafe { [self.start.as_mut(), self.end.as_mut()] }
+    }
+
+    #[inline(always)]
+    pub fn get_parts_as_uninit(&mut self) -> [&mut [MaybeUninit<T>]; 3] {
+        // TODO: call sites should use `MaybeUninit::copy_from_slice` when stabilized
+        // SAFETY: &[T] and &[MaybeUninit<T>] have the same layout
+        let [start, end] =
+            unsafe { transmute::<[&mut [T]; 2], [&mut [MaybeUninit<T>]; 2]>(self.get_parts_mut()) };
+        let spare = self.spare_capacity_mut();
+        [start, spare, end]
     }
 
     #[inline(always)]
@@ -326,12 +336,22 @@ impl<T> RawGapBuf<T> {
     /// implementations (such as a string buffer) to do efficient copying without worrying about
     /// drop code.
     #[inline(always)]
-    pub const fn spare_capacity_mut(&mut self) -> NonNull<[MaybeUninit<T>]> {
+    pub const fn spare_capacity_ptr(&mut self) -> NonNull<[MaybeUninit<T>]> {
         unsafe {
             let gap_start = self.start.cast::<MaybeUninit<T>>().add(self.start.len());
             let gap_len = self.gap_len();
             NonNull::slice_from_raw_parts(gap_start, gap_len)
         }
+    }
+
+    /// Returns a pointer to the possibly uninitialized gap
+    ///
+    /// This function explicity returns a pointer instead of a `&mut [T]` to allow specialized
+    /// implementations (such as a string buffer) to do efficient copying without worrying about
+    /// drop code.
+    #[inline(always)]
+    pub const fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
+        unsafe { self.spare_capacity_ptr().as_mut() }
     }
 
     /// Returns the current gap length
@@ -501,7 +521,7 @@ impl<T> RawGapBuf<T> {
         // branching
         //
         // TODO: should benchmark if this is even worth it
-        let spare = self.spare_capacity_mut();
+        let spare = self.spare_capacity_ptr();
         let gap_len = spare.len();
         let spare = spare.cast::<T>();
         let shift: isize;
@@ -691,9 +711,6 @@ impl<T> RawGapBuf<T> {
         if layout.size() == 0 {
             return;
         }
-
-        let alloc_box = Box::<[T]>::new_uninit_slice(total_len - by);
-        let [start, end] = self.get_parts();
 
         unsafe {
             let gap_ptr = self.start_ptr().add(self.start_len() + gap_len - by);
