@@ -728,14 +728,14 @@ impl<T> RawGapBuf<T> {
 
         let gap_len = self.gap_len();
 
-        assert!(gap_len >= by);
+        assert!(gap_len >= by && by > 0);
         let start_len = self.start_len();
         let end_len = self.end_len();
         let total_len = start_len + gap_len + end_len;
         let layout = self.layout();
-        if layout.size() == 0 {
-            return;
-        }
+        let new_size = (total_len - by)
+            .checked_mul(size_of::<T>())
+            .expect("unable to allocate space for more than isize::MAX bytes");
 
         unsafe {
             let gap_ptr = self.start_ptr().add(self.start_len() + gap_len - by);
@@ -748,9 +748,7 @@ impl<T> RawGapBuf<T> {
             let Some(new_ptr) = NonNull::new(alloc::realloc(
                 self.start_ptr().as_ptr().cast::<u8>(),
                 layout,
-                (total_len - by)
-                    .checked_mul(size_of::<T>())
-                    .expect("unable to allocate space for more than isize::MAX bytes"),
+                new_size,
             ))
             .map(NonNull::cast::<T>) else {
                 // never should panic as we are shrinking the old layout
