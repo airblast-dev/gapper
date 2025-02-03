@@ -2,11 +2,10 @@ use std::{
     cmp::Ordering,
     marker::PhantomData,
     ops::{Deref, DerefMut, Range, RangeBounds},
-    ptr::NonNull,
     str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
 
-use bytemuck::{cast_slice, must_cast, must_cast_slice};
+use bytemuck::must_cast_slice;
 
 use crate::{
     grower::{DefaultGrower, Grower},
