@@ -76,11 +76,11 @@ impl<T> RawGapBuf<T> {
     /// Initialize a [`RawGapBuf`] by byte copying from the source.
     ///
     /// Useful when reallocating the buffer.
-    ///
-    /// # Safety
-    /// Calling source T's drop code is UB.
     #[inline]
-    pub unsafe fn new_with_slice(start: &[&[T]], gap_size: usize, end: &[&[T]]) -> Self {
+    pub fn new_with_slice(start: &[&[T]], gap_size: usize, end: &[&[T]]) -> Self
+    where
+        T: Copy,
+    {
         let start_len = start.iter().map(|s| s.len()).sum();
         let end_len = end.iter().map(|s| s.len()).sum();
         let total_len: usize = start_len + end_len + gap_size;
