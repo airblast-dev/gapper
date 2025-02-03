@@ -232,7 +232,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// # Panics
     /// If the provided range is out of bounds or the range start is greater than its end.
     /// If the range does not lie on a char boundary.
-    pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Drain {
+    pub fn remove<'a, RB: RangeBounds<usize>>(&'a mut self, r: RB) -> &'a str {
         let r = get_range(self.buf.len(), r)
             .expect("range should never be out of bounds when draining");
         assert!(self.is_get_char_boundary(r.start..r.end));
@@ -263,13 +263,10 @@ impl<G: Grower<str>> GrowingGapString<G> {
             // allocation. When editing this code make sure that no moves or copies are made after the
             // string variable is initialized.
             let s: &str = from_utf8_unchecked(transmute::<&[std::mem::MaybeUninit<u8>], &[u8]>(
-                self.buf.as_slices().1,
+                &self.buf.as_slices().1[0..r.len()],
             ));
 
-            Drain {
-                chars: s.chars(),
-                __p: PhantomData,
-            }
+            s
         }
     }
 
@@ -344,12 +341,12 @@ impl<G: Grower<str>> GrowingGapString<G> {
 }
 
 pub struct Drain<'a> {
-    chars: Chars<'a>,
-    __p: PhantomData<&'a u8>,
+    chars: Chars<'static>,
+    __p: PhantomData<&'a str>,
 }
 
-impl<'a> Deref for Drain<'a> {
-    type Target = Chars<'a>;
+impl Deref for Drain<'_> {
+    type Target = Chars<'static>;
     fn deref(&self) -> &Self::Target {
         &self.chars
     }
@@ -432,20 +429,20 @@ mod tests {
     }
 
     #[apply(grower_template)]
-    fn drain(g: TestGrower) {
+    fn remove(g: TestGrower) {
         let mut s_buf = GrowingGapString::with_grower(g);
         s_buf.insert("Hello", 0);
-        assert_eq!(s_buf.drain(0..2).as_str(), "He");
+        assert_eq!(s_buf.remove(0..2), "He");
         assert_eq!(s_buf.len(), 3);
-        assert_eq!(s_buf.drain(0..2).as_str(), "ll");
+        assert_eq!(s_buf.remove(0..2), "ll");
         assert_eq!(s_buf.len(), 1);
-        assert_eq!(s_buf.drain(0..1).as_str(), "o");
+        assert_eq!(s_buf.remove(0..1), "o");
         assert!(s_buf.is_empty());
 
         let mut s_buf = GrowingGapString::with_grower(g);
         s_buf.insert("Hello", 0);
-        let dr = s_buf.drain(..);
-        assert_eq!(dr.as_str(), "Hello");
+        let dr = s_buf.remove(..);
+        assert_eq!(dr, "Hello");
         assert!(s_buf.is_empty());
     }
 
