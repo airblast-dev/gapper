@@ -216,10 +216,6 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.move_gap_start_to(r.end);
         let start = self.raw.as_slices_mut().0;
         let ret = Some(Drain {
-            // SAFETY: we have done the necessary range checks and have moved the gap start
-            // position to the end of the provided range
-            // this means the pointer points to a valid [T] starting at r.start and ending at
-            // r.end
             ptr: NonNull::from(&mut start[r.start..r.end]),
             __p: PhantomData,
         });
