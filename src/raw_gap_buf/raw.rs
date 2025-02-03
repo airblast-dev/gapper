@@ -353,7 +353,8 @@ impl<T> RawGapBuf<T> {
         if Self::IS_ZST {
             return len;
         }
-        unsafe { (self.end_ptr().offset_from(self.start_ptr()) as usize) + self.end_len() }
+
+        len + self.gap_len()
     }
 
     /// Grow the start slice by the provided value
@@ -686,13 +687,20 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         let end_len = self.end_len();
         let total_len = start_len + gap_len + end_len;
+        let layout = self.layout();
+        if layout.size() == 0 {
+            return;
+        }
+
+        let alloc_box = Box::<[T]>::new_uninit_slice(total_len - by);
+        let [start, end] = self.get_parts();
+
         unsafe {
             let gap_ptr = self.start_ptr().add(self.start_len() + gap_len - by);
 
             // SAFETY: both are valid for enough read and writes
             self.end_ptr().copy_to(gap_ptr, self.end_len());
 
-            let layout = self.layout();
             // SAFETY: the pointer is properly aligned and does point to allocated memory as we have
             // checked the size above
             let Some(new_ptr) = NonNull::new(alloc::realloc(
