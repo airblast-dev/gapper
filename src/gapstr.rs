@@ -5,7 +5,7 @@ use std::{
     str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
 
-use bytemuck::must_cast_slice;
+use bytemuck::{cast_slice, must_cast_slice};
 
 use crate::{
     grower::{DefaultGrower, Grower},
@@ -301,11 +301,12 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 }
 
                 self.buf.move_gap_start_to(r.end);
-                // SAFETY: the source is correctly aligned and we know that the slice is not
-                // overlapping
-                // we have shifted the gap to the end of the range and we are not overwriting the
-                // contents of the end slice
-                self.buf.get_parts_mut()[0].copy_from_slice(s.as_bytes());
+                let [start, gap, _] = self.buf.get_parts_as_uninit();
+                let (pre, post) = s.as_bytes().split_at(r.len());
+                start[r.start..r.start + pre.len()].copy_from_slice(must_cast_slice(pre));
+                gap[0..post.len()].copy_from_slice(must_cast_slice(post));
+                // SAFETY: s.len() - r.len() new items have been initialized it is now safe to grow
+                // the start slice
                 unsafe {
                     self.buf.grow_start(needed_space);
                 };
