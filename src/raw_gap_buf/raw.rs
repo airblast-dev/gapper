@@ -50,26 +50,29 @@ impl<T> RawGapBuf<T> {
     #[inline]
     #[cfg(test)]
     pub fn new_with<const S: usize, const E: usize>(
-        mut start: [T; S],
+        start: [T; S],
         gap_size: usize,
-        mut end: [T; E],
+        end: [T; E],
     ) -> Self {
         let total_len = start.len() + end.len() + gap_size;
-        let alloc_ptr =
-            NonNull::from(Box::leak(Box::<[T]>::new_uninit_slice(total_len))).cast::<T>();
-        unsafe {
-            alloc_ptr.copy_from_nonoverlapping(NonNull::from(&mut start).cast::<T>(), S);
-            alloc_ptr
-                .add(S + gap_size)
-                .copy_from_nonoverlapping(NonNull::from(&mut end).cast::<T>(), E);
+        let alloc_box = Box::leak(Box::<[T]>::new_uninit_slice(total_len));
+        for (i, item) in start.into_iter().enumerate() {
+            alloc_box[i].write(item);
+        }
+        for (i, item) in end.into_iter().enumerate() {
+            alloc_box[S + gap_size + i].write(item);
+        }
 
-            core::mem::forget(start);
-            core::mem::forget(end);
-
-            Self {
-                start: NonNull::slice_from_raw_parts(alloc_ptr, S),
-                end: NonNull::slice_from_raw_parts(alloc_ptr.add(S + gap_size), E),
-            }
+        let ptr = NonNull::from(&mut *alloc_box);
+        Self {
+            start: NonNull::slice_from_raw_parts(ptr.cast::<T>(), S),
+            end: NonNull::slice_from_raw_parts(
+                // SAFETY: we have initialized E items starting from S + gap_size
+                // We cannot remove this unsafe without miri complaining due to both not being from
+                // the same pointer.
+                unsafe { ptr.cast::<T>().add(S + gap_size) },
+                E,
+            ),
         }
     }
 
@@ -892,13 +895,11 @@ mod tests {
 
     #[test]
     fn new_with_slice() {
-        let s_buf = unsafe {
-            RawGapBuf::new_with_slice(
-                &[[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
-                10,
-                &[[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
-            )
-        };
+        let s_buf = RawGapBuf::new_with_slice(
+            &[[1, 2, 3].as_slice(), [4, 5, 6].as_slice()],
+            10,
+            &[[7, 8, 9].as_slice(), [10, 11, 12].as_slice()],
+        );
         assert_eq!(
             s_buf.get_parts(),
             [
