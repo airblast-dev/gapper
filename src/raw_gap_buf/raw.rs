@@ -136,22 +136,44 @@ impl<T> RawGapBuf<T> {
 
     #[inline(always)]
     pub const fn get_parts(&self) -> [&[T]; 2] {
-        unsafe { [self.start.as_ref(), self.end.as_ref()] }
+        let (start, _, end) = self.as_slices();
+        [start, end]
     }
 
     #[inline(always)]
     pub const fn get_parts_mut(&mut self) -> [&mut [T]; 2] {
-        unsafe { [self.start.as_mut(), self.end.as_mut()] }
+        let (start, _, end) = self.as_slices_mut();
+        [start, end]
     }
 
-    #[inline(always)]
-    pub fn get_parts_as_uninit(&mut self) -> [&mut [MaybeUninit<T>]; 3] {
-        // TODO: call sites should use `MaybeUninit::copy_from_slice` when stabilized
-        // SAFETY: &[T] and &[MaybeUninit<T>] have the same layout
-        let [start, end] =
-            unsafe { transmute::<[&mut [T]; 2], [&mut [MaybeUninit<T>]; 2]>(self.get_parts_mut()) };
-        let spare = self.spare_capacity_mut();
-        [start, spare, end]
+    pub const fn as_slices(&self) -> (&[T], &[MaybeUninit<T>], &[T]) {
+        unsafe {
+            let start = self.start().as_ref();
+            let gap = NonNull::slice_from_raw_parts(
+                self.start_ptr()
+                    .cast::<MaybeUninit<T>>()
+                    .add(self.start_len()),
+                self.gap_len(),
+            )
+            .as_ref();
+            let end = self.end().as_ref();
+            (start, gap, end)
+        }
+    }
+
+    pub const fn as_slices_mut(&mut self) -> (&mut [T], &mut [MaybeUninit<T>], &mut [T]) {
+        unsafe {
+            let start = self.start().as_mut();
+            let gap = NonNull::slice_from_raw_parts(
+                self.start_ptr()
+                    .cast::<MaybeUninit<T>>()
+                    .add(self.start_len()),
+                self.gap_len(),
+            )
+            .as_mut();
+            let end = self.end().as_mut();
+            (start, gap, end)
+        }
     }
 
     #[inline(always)]

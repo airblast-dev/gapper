@@ -1,11 +1,12 @@
 use std::{
     cmp::Ordering,
     marker::PhantomData,
+    mem::transmute,
     ops::{Deref, DerefMut, Range, RangeBounds},
     str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
 
-use bytemuck::{cast_slice, must_cast_slice};
+use bytemuck::must_cast_slice;
 
 use crate::{
     grower::{DefaultGrower, Grower},
@@ -57,6 +58,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     {
         let grower = G::default();
         Self {
+            // SAFETY: str and [u8] have the same alignment and layout
             buf: unsafe {
                 RawGapBuf::new_with_slice(
                     core::mem::transmute::<&[&str], &[&[u8]]>(start),
@@ -209,7 +211,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
         self.buf.move_gap_start_to(at);
 
-        let [_, gap, _] = self.buf.get_parts_as_uninit();
+        let (_, gap, _) = self.buf.as_slices_mut();
 
         gap[0..s.len()].copy_from_slice(must_cast_slice(s.as_bytes()));
 
@@ -250,18 +252,20 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
 
         self.buf.move_gap_start_to(r.end);
-        // SAFETY:
-        // - s is valid as long as self isn't mutated which we dissallow via the PhantomData in Drain
-        // - The start slice is fully initialized and we have validated the range above
-        //
-        // WARNING: until we return the Drain, we are technically allowed to call mutable methods,
-        // but calling any method with &mut self is unsound if it moves anything inside the
-        // allocation. When editing this code make sure that no moves or copies are made after the
-        // string variable is initialized.
         unsafe {
-            let s: &str =
-                from_utf8_unchecked(self.buf.start().as_ref().get_unchecked(r.start..r.end));
             self.buf.shrink_start(r.len());
+            // SAFETY:
+            // - s is valid as long as self isn't mutated which we dissallow via the PhantomData in Drain
+            // - The start slice is fully initialized and we have validated the range above
+            //
+            // WARNING: until we return the Drain, we are technically allowed to call mutable methods,
+            // but calling any method with &mut self is unsound if it moves anything inside the
+            // allocation. When editing this code make sure that no moves or copies are made after the
+            // string variable is initialized.
+            let s: &str = from_utf8_unchecked(transmute::<&[std::mem::MaybeUninit<u8>], &[u8]>(
+                self.buf.as_slices().1,
+            ));
+
             Drain {
                 chars: s.chars(),
                 __p: PhantomData,
@@ -301,7 +305,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 }
 
                 self.buf.move_gap_start_to(r.end);
-                let [start, gap, _] = self.buf.get_parts_as_uninit();
+                let (start, gap, _) = self.buf.as_slices_mut();
                 let (pre, post) = s.as_bytes().split_at(r.len());
                 start[r.start..r.start + pre.len()].copy_from_slice(must_cast_slice(pre));
                 gap[0..post.len()].copy_from_slice(must_cast_slice(post));
