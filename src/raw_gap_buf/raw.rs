@@ -496,12 +496,16 @@ impl<T> RawGapBuf<T> {
         // Using shrink_* and grow_* wouldn't help the UB problem when incorrectly used as they
         // would point to out of bounds. The only difference here is we are able to optimize this
         // further with fairly similar risks.
-        self.start = NonNull::slice_from_raw_parts(self.start_ptr(), unsafe {
-            self.start_len().checked_add_signed(by).unwrap_unchecked()
-        });
-        self.end = NonNull::slice_from_raw_parts(self.end_ptr().offset(by), unsafe {
-            self.end_len().checked_add_signed(-by).unwrap_unchecked()
-        });
+        unsafe {
+            self.start = NonNull::slice_from_raw_parts(
+                self.start_ptr(),
+                self.start_len().checked_add_signed(by).unwrap_unchecked(),
+            );
+            self.end = NonNull::slice_from_raw_parts(
+                self.end_ptr().offset(by),
+                self.end_len().checked_add_signed(-by).unwrap_unchecked(),
+            );
+        }
     }
 
     #[inline(always)]
