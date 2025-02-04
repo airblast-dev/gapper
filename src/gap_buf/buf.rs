@@ -166,11 +166,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
             self.raw.move_gap_start_to(at);
         }
 
-        self.raw.spare_capacity_mut()[0].write(val);
-        unsafe {
-            // we have written the value and it is now safe to grow the start
-            self.raw.grow_start(1);
-        }
+        self.raw.grow_start_with(val);
     }
 
     /// Insert many T's from an iterator at the provided position
@@ -183,23 +179,15 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// If the provided position > len panics.
     #[inline]
     pub fn insert_many<I: Iterator<Item = T>>(&mut self, mut iter: I, at: usize) {
-        let mut hint = iter.size_hint().0;
+        let mut hint = iter.size_hint().0.max(1);
         self.raw.move_gap_start_to(at);
         while let Some(item) = iter.next() {
             if self.raw.gap_len() < hint {
-                self.grow_gap(hint.max(1));
+                self.grow_gap(hint);
             }
 
-            // we have moved the gap to the first T position in the gap, each item we add
-            // shifts it by one. we have also growed the gap to account for the insert.
-            // It is now safe to write the T and grow our start slice
-            self.raw.spare_capacity_mut()[0].write(item);
-            unsafe {
-                // The grow is intentionally adjusted on every iteration as we are calling user code which
-                // could panic and leave our buffer in an invalid state.
-                self.raw.grow_start(1);
-            };
-            hint = iter.size_hint().0;
+            self.raw.grow_start_with(item);
+            hint = iter.size_hint().0.max(1);
         }
     }
 

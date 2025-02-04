@@ -422,6 +422,24 @@ impl<T> RawGapBuf<T> {
         self.start = NonNull::slice_from_raw_parts(t_ptr, start_len + by);
     }
 
+    /// Grow the start slice with the provided value
+    #[inline(always)]
+    pub fn grow_start_with(&mut self, val: T) {
+        let start_len = self.start_len();
+        let t_ptr = self.start_ptr();
+
+        if self.gap_len() == 0 {
+            self.grow_gap(1);
+            #[cfg(test)]
+            unreachable!(
+                "caller should allocate before calling this method to avoid multiple reallocations"
+            );
+            self.grow_gap(1);
+        }
+
+        unsafe { t_ptr.add(start_len).write(val) };
+    }
+
     /// Shrink the start slice by the provided value
     ///
     /// # Safety
