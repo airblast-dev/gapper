@@ -203,11 +203,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
             from_utf8_unchecked(s)
         });
         if self.buf.gap_len() < s.len() {
-            let base_gap_size = self
+            let new_gap_size = self
                 .grower
                 .base_gap_size(start, end)
                 .min(self.grower.max_gap_size(start, end));
-            self.buf.grow_gap(base_gap_size + s.len());
+            self.buf.grow_gap(new_gap_size + s.len());
         }
         self.buf.move_gap_start_to(at);
 
@@ -244,8 +244,8 @@ impl<G: Grower<str>> GrowingGapString<G> {
             let max_gap_size = self.grower.max_gap_size(start, end);
             let gap_len = self.gap_len();
             if gap_len > max_gap_size {
-                let base_gap_size = self.grower.base_gap_size(start, end);
-                self.shrink_gap(gap_len - max_gap_size.min(base_gap_size));
+                let new_gap_size = self.grower.base_gap_size(start, end).min(max_gap_size);
+                self.shrink_gap(gap_len - new_gap_size);
             }
         }
 
@@ -288,8 +288,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
                         .buf
                         .get_parts()
                         .map(|s| unsafe { from_utf8_unchecked(s) });
-                    let base_gap_size = self.grower.base_gap_size(start, end);
-                    self.buf.grow_gap(needed_space + base_gap_size);
+                    let new_gap_size = self
+                        .grower
+                        .base_gap_size(start, end)
+                        .min(self.grower.max_gap_size(start, end));
+                    self.buf.grow_gap(needed_space + new_gap_size);
                 }
 
                 self.buf.move_gap_start_to(r.end);
