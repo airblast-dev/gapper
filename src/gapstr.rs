@@ -298,7 +298,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 self.buf.move_gap_start_to(r.end);
                 let (start, gap, _) = self.buf.as_slices_mut();
                 let (pre, post) = s.as_bytes().split_at(r.len());
-                start[r.start..r.start + pre.len()].copy_from_slice(must_cast_slice(pre));
+                start[r.start..r.start + pre.len()].copy_from_slice(pre);
                 gap[0..post.len()].copy_from_slice(must_cast_slice(post));
                 // SAFETY: s.len() - r.len() new items have been initialized it is now safe to grow
                 // the start slice
