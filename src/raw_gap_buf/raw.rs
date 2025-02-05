@@ -437,24 +437,70 @@ impl<T> RawGapBuf<T> {
             self.grow_gap(1);
         }
 
-        unsafe { t_ptr.add(start_len).write(val) };
+        unsafe {
+            t_ptr.add(start_len).write(val);
+            self.grow_start(1);
+        };
+    }
+
+    /// Grow the start slice with the provided value
+    #[inline(always)]
+    pub fn grow_start_with_slice(&mut self, val: &[T])
+    where
+        T: Copy,
+    {
+        assert!(self.gap_len() >= val.len());
+        if self.gap_len() < val.len() {
+            self.grow_gap(1);
+            #[cfg(test)]
+            unreachable!(
+                "caller should allocate before calling this method to avoid multiple reallocations"
+            );
+            self.grow_gap(val.len());
+        }
+
+        unsafe {
+            self.spare_capacity_ptr()
+                .cast::<T>()
+                .copy_from_nonoverlapping(NonNull::from(val).cast::<T>(), val.len());
+            self.grow_start(val.len());
+        };
     }
 
     /// Shrink the start slice by the provided value
     ///
-    /// # Safety
-    /// Caller must ensure that the values are correctly dropped, the start length >= by, and that
-    /// the pointer has enough provenance.
+    /// Caller must deal with T's drop code.
+    ///
+    /// # Panics
+    ///
+    /// Start length should always be greater than or equal to the argument.
     #[inline(always)]
-    pub unsafe fn shrink_start(&mut self, by: usize) {
+    pub fn shrink_start(&mut self, by: usize) -> NonNull<[T]> {
         let start_len = self.start_len();
-
-        // ensure shrinking the slice does not point out of bounds
-        debug_assert!(
-            start_len >= by,
-            "cannot shrink start slice when shrink value is more than the total length"
-        );
+        assert!(by <= start_len);
         self.start = NonNull::slice_from_raw_parts(self.start_ptr(), start_len - by);
+        NonNull::slice_from_raw_parts(self.spare_capacity_ptr().cast::<T>(), by)
+    }
+
+    /// Shrink the start slice by the provided value
+    ///
+    /// Caller must deal with T's drop code.
+    ///
+    /// # Panics
+    ///
+    /// Start length should always be greater than or equal to the argument.
+    #[inline(always)]
+    pub fn shrink_start_with(&mut self, by: usize) -> &mut [T]
+    where
+        T: Copy,
+    {
+        let start_len = self.start_len();
+        assert!(by <= start_len);
+
+        unsafe {
+            self.start = NonNull::slice_from_raw_parts(self.start_ptr(), start_len - by);
+            NonNull::slice_from_raw_parts(self.start_ptr().add(start_len - by), by).as_mut()
+        }
     }
 
     /// Grow the end slice by the provided value
@@ -481,16 +527,18 @@ impl<T> RawGapBuf<T> {
     /// Caller must ensure that the values are correctly dropped, the end length >= by, and that
     /// the pointer has enough provenance.
     #[inline(always)]
-    pub unsafe fn shrink_end(&mut self, by: usize) {
+    pub unsafe fn shrink_end(&mut self, by: usize) -> NonNull<[T]> {
         let end_len = self.end_len();
 
         // ensure shrinking the slice does not point out of bounds
-        debug_assert!(
+        assert!(
             end_len >= by,
             "cannot shrink start slice when shrink value is more than the total length"
         );
+        let old_end = self.end_ptr();
         let t_ptr = unsafe { self.end_ptr().add(by) };
         self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
+        NonNull::slice_from_raw_parts(old_end, by)
     }
 
     /// Shifts the gap by the provided value

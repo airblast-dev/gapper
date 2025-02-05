@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     marker::PhantomData,
-    mem::transmute,
     ops::{Deref, DerefMut, Range, RangeBounds},
     str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
@@ -211,15 +210,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
         self.buf.move_gap_start_to(at);
 
-        let gap = self.buf.spare_capacity_mut();
-
-        gap[0..s.len()].copy_from_slice(must_cast_slice(s.as_bytes()));
-
-        unsafe {
-            // SAFETY: we have initialized the gaps first s.len items it is now safe to grow the
-            // start
-            self.buf.grow_start(s.len());
-        };
+        self.buf.grow_start_with_slice(s.as_bytes());
     }
 
     /// Equivalent to [`String::drain`] from the standard library
@@ -250,15 +241,9 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
 
         self.buf.move_gap_start_to(r.end);
-        unsafe {
-            self.buf.shrink_start(r.len());
+        let removed = self.buf.shrink_start_with(r.len());
 
-            let s: &str = from_utf8_unchecked(transmute::<&[std::mem::MaybeUninit<u8>], &[u8]>(
-                &self.buf.spare_capacity_mut()[0..r.len()],
-            ));
-
-            s
-        }
+        unsafe { from_utf8_unchecked(removed) }
     }
 
     /// Equivalent to [`String::replace_range`] from the standard library
@@ -272,14 +257,9 @@ impl<G: Grower<str>> GrowingGapString<G> {
         match r.len().cmp(&s.len()) {
             Ordering::Greater => {
                 self.buf.move_gap_start_to(r.end);
-                // SAFETY: we just checked the bounds above
                 self.buf.get_parts_mut()[0][r.start..r.start + s.len()]
                     .copy_from_slice(s.as_bytes());
-                // SAFETY: we checked the bounds above and r.len is greater than s.len so no
-                // overflow can occur
-                unsafe {
-                    self.buf.shrink_start(r.len() - s.len());
-                }
+                self.buf.shrink_start(r.len() - s.len());
             }
             Ordering::Less => {
                 let needed_space = s.len() - r.len();
@@ -296,15 +276,10 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 }
 
                 self.buf.move_gap_start_to(r.end);
-                let (start, gap, _) = self.buf.as_slices_mut();
+                let start = &mut self.buf.get_parts_mut()[0];
                 let (pre, post) = s.as_bytes().split_at(r.len());
                 start[r.start..r.start + pre.len()].copy_from_slice(pre);
-                gap[0..post.len()].copy_from_slice(must_cast_slice(post));
-                // SAFETY: s.len() - r.len() new items have been initialized it is now safe to grow
-                // the start slice
-                unsafe {
-                    self.buf.grow_start(needed_space);
-                };
+                self.buf.grow_start_with_slice(must_cast_slice(post));
             }
             Ordering::Equal => {
                 // SAFETY: we just checked the bounds above

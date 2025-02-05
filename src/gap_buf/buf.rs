@@ -202,19 +202,17 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<Drain<'_, T>> {
         let r = get_range(self.raw.len(), r)?;
         self.raw.move_gap_start_to(r.end);
-        let start = &mut self.raw.get_parts_mut()[0];
-        let ret = Some(Drain {
-            ptr: NonNull::from(&mut start[r.start..r.end]),
-            __p: PhantomData,
-        });
 
         // SAFETY: the shrunken portion of the start slice is moved into Drain
         // this part is now considered removed by the buffer
         // we have also done the necessary range checks above, and moved the gap to the end of the range
         // it is now safe safe to shrink as Drain has taken ownership of this portion of the buffer
-        unsafe { self.raw.shrink_start(r.len()) };
+        let drain_ptr = self.raw.shrink_start(r.len());
 
-        ret
+        Some(Drain {
+            ptr: drain_ptr,
+            __p: PhantomData,
+        })
     }
 
     /// See [`RawGapBuf::realloc`]
