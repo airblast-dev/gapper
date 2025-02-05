@@ -611,9 +611,9 @@ impl<T> RawGapBuf<T> {
         // branching
         //
         // TODO: should benchmark if this is even worth it
-        let spare = self.spare_capacity_ptr();
+        let start_len = self.start_len();
+        let (start, spare, end) = self.as_slices_mut();
         let gap_len = spare.len();
-        let spare = spare.cast::<T>();
         let shift: isize;
         // a tagged scope is used to reduce the branch count
         // the shift operation always happens, but src and dst cannot be overlapping
@@ -623,19 +623,17 @@ impl<T> RawGapBuf<T> {
             let dst;
             let copy_count;
             // move gap left
-            if to < self.start_len() && self.start_len() - to <= gap_len {
-                copy_count = self.start_len() - to;
+            if to < start_len && start_len - to <= gap_len {
+                copy_count = start_len - to;
                 shift = -(copy_count as isize);
-                unsafe {
-                    src = self.start_ptr().add(self.start_len() - copy_count);
-                    dst = spare.add(gap_len - copy_count);
-                }
+                src = NonNull::from(&start[start_len - copy_count..]).cast::<T>();
+                dst = NonNull::from(&mut spare[gap_len - copy_count..]).cast::<MaybeUninit<T>>();
             }
             // move gap right
-            else if to > self.start_len() && to - self.start_len() <= gap_len {
-                copy_count = to - self.start_len();
-                src = self.end_ptr();
-                dst = spare;
+            else if to > start_len && to - start_len <= gap_len {
+                copy_count = to - start_len;
+                src = NonNull::from(&end[0..copy_count]).cast::<T>();
+                dst = NonNull::from(&mut spare[0..copy_count]).cast::<MaybeUninit<T>>();
                 shift = copy_count as isize;
             } else {
                 // move gap right
@@ -643,7 +641,11 @@ impl<T> RawGapBuf<T> {
                     copy_count = to - self.start_len();
                     shift = copy_count as isize;
 
-                    (self.end_ptr(), spare, copy_count)
+                    (
+                        self.end_ptr(),
+                        self.spare_capacity_ptr().cast::<MaybeUninit<T>>(),
+                        copy_count,
+                    )
                 }
                 // move gap left
                 else {
@@ -652,11 +654,13 @@ impl<T> RawGapBuf<T> {
                     unsafe {
                         (
                             self.start_ptr().add(to),
-                            self.start_ptr().add(to + gap_len),
+                            self.start_ptr().add(to + gap_len).cast::<MaybeUninit<T>>(),
                             copy_count,
                         )
                     }
                 };
+
+                let src = src.cast::<MaybeUninit<T>>();
 
                 unsafe { src.copy_to(dst, copy_count) };
                 // the copy is not non overlapping so we did it right above
@@ -664,8 +668,9 @@ impl<T> RawGapBuf<T> {
                 break 'ov;
             }
 
+            let src = src.cast::<MaybeUninit<T>>();
             // debug assertion in case there is a logic error above
-            debug_assert!(
+            assert!(
                 unsafe { src.offset_from(dst).unsigned_abs() >= copy_count },
                 "attempted to copy overlapping pointers"
             );
