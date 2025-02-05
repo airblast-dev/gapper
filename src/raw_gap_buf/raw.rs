@@ -423,9 +423,6 @@ impl<T> RawGapBuf<T> {
     /// Grow the start slice with the provided value
     #[inline(always)]
     pub fn grow_start_with(&mut self, val: T) {
-        let start_len = self.start_len();
-        let t_ptr = self.start_ptr();
-
         if self.gap_len() == 0 {
             self.grow_gap(1);
             #[cfg(test)]
@@ -435,8 +432,8 @@ impl<T> RawGapBuf<T> {
             self.grow_gap(1);
         }
 
+        self.spare_capacity_mut()[0].write(val);
         unsafe {
-            t_ptr.add(start_len).write(val);
             self.grow_start(1);
         };
     }
@@ -457,10 +454,12 @@ impl<T> RawGapBuf<T> {
             self.grow_gap(val.len());
         }
 
+        let spare = self.spare_capacity_mut();
+        for (i, val) in val.iter().copied().enumerate() {
+            spare[i].write(val);
+        }
+
         unsafe {
-            self.spare_capacity_ptr()
-                .cast::<T>()
-                .copy_from_nonoverlapping(NonNull::from(val).cast::<T>(), val.len());
             self.grow_start(val.len());
         };
     }
@@ -495,10 +494,7 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         assert!(by <= start_len);
 
-        unsafe {
-            self.start = NonNull::slice_from_raw_parts(self.start_ptr(), start_len - by);
-            NonNull::slice_from_raw_parts(self.start_ptr().add(start_len - by), by).as_mut()
-        }
+        unsafe { self.shrink_start(by).as_mut() }
     }
 
     /// Grow the end slice by the provided value
@@ -509,8 +505,9 @@ impl<T> RawGapBuf<T> {
     #[inline(always)]
     pub unsafe fn grow_end(&mut self, by: usize) {
         let end_len = self.end_len();
+
         if !Self::IS_ZST {
-            debug_assert!(
+            assert!(
                 self.gap_len() >= by,
                 "cannot grow the end slice when the grow overlaps with the start slice"
             );
