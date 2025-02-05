@@ -96,41 +96,39 @@ impl<T> RawGapBuf<T> {
             };
         }
 
-        let alloc_ptr =
-            NonNull::from(Box::leak(Box::<[T]>::new_uninit_slice(total_len))).cast::<T>();
+        let alloc_ptr = Box::leak(Box::<[T]>::new_uninit_slice(total_len));
 
         let mut i = 0;
         let mut offset = 0;
 
         while i < start.len() {
-            let i_len = start[i].len();
-            unsafe {
-                alloc_ptr
-                    .add(offset)
-                    .copy_from_nonoverlapping(NonNull::from(start[i]).cast::<T>(), i_len)
-            };
+            for val in start[i].iter().copied() {
+                alloc_ptr[offset].write(val);
+                offset += 1;
+            }
+
             i += 1;
-            offset += i_len;
         }
 
         offset += gap_size;
 
         i = 0;
         while i < end.len() {
-            let i_len = end[i].len();
-            unsafe {
-                alloc_ptr
-                    .add(offset)
-                    .copy_from_nonoverlapping(NonNull::from(end[i]).cast::<T>(), i_len)
-            };
+            for val in end[i].iter().copied() {
+                alloc_ptr[offset].write(val);
+                offset += 1;
+            }
             i += 1;
-            offset += i_len;
         }
         Self {
-            start: NonNull::slice_from_raw_parts(alloc_ptr, start_len),
-            end: unsafe {
-                NonNull::slice_from_raw_parts(alloc_ptr.add(start_len + gap_size), end_len)
-            },
+            start: NonNull::slice_from_raw_parts(
+                NonNull::from(&mut *alloc_ptr).cast::<T>(),
+                start_len,
+            ),
+            end: NonNull::slice_from_raw_parts(
+                NonNull::from(&alloc_ptr[start_len + gap_size..]).cast::<T>(),
+                end_len,
+            ),
         }
     }
 
