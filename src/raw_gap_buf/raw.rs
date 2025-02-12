@@ -698,14 +698,6 @@ impl<T> RawGapBuf<T> {
         self.move_gap_start_to(move_to);
     }
 
-    /// Drop's Self, calling the drop code of the stored T
-    #[cfg(test)]
-    pub fn drop_in_place(mut self) {
-        // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
-        // access is performed to the inner T's
-        unsafe { self.drop_t() };
-    }
-
     /// Call the drop code for the stored T
     ///
     /// # Safety
@@ -884,6 +876,15 @@ impl<T> Drop for RawGapBuf<T> {
 mod tests {
 
     use super::RawGapBuf;
+
+    impl<T> RawGapBuf<T> {
+        /// Drop's Self, calling the drop code of the stored T
+        pub fn drop_in_place(mut self) {
+            // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
+            // access is performed to the inner T's
+            unsafe { self.drop_t() };
+        }
+    }
 
     #[test]
     fn new() {
