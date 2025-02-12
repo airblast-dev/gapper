@@ -158,7 +158,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// If the provided position is greater than [`GrowingGapBuf::len`].
     #[inline]
     pub fn insert(&mut self, at: usize, val: T) {
-        assert!(self.raw.get(at).is_some() || self.raw.len() == at);
+        assert!(self.raw.len() >= at);
         if self.raw.gap_len() == 0 {
             let [start, end] = self.raw.get_parts();
             let base = self.grower.base_gap_size(start, end);
