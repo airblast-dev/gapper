@@ -143,9 +143,9 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         self.raw.to_slice()
     }
 
-    /// Same as [`GrowingGapBuf::to_slice`] but returns a mutable slice
+    /// Same as [`GrowingGapBuf::make_contiguous`] but returns a mutable slice
     ///
-    /// See [`GrowingGapBuf::to_slice`] for more information.
+    /// See [`GrowingGapBuf::make_contiguous`] for more information.
     #[inline(always)]
     pub fn make_contiguous_mut(&mut self) -> &mut [T] {
         self.raw.to_slice_mut()
@@ -153,7 +153,9 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     /// Insert T at the provided position
     ///
-    /// # Panics if the provided position is out of bounds.
+    /// # Panics 
+    ///
+    /// If the provided position is greater than [`GrowingGapBuf::len`].
     #[inline]
     pub fn insert(&mut self, at: usize, val: T) {
         assert!(self.raw.get(at).is_some() || self.raw.len() == at);
