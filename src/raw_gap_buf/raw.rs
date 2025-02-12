@@ -427,6 +427,8 @@ impl<T> RawGapBuf<T> {
         }
 
         self.spare_capacity_mut()[0].write(val);
+
+        // SAFETY: we just initialized the first item in the gap above
         unsafe {
             self.grow_start(1);
         };
