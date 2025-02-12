@@ -17,7 +17,7 @@ impl<T, G: Grower<[T]> + Default> Default for GrowingGapBuf<T, G> {
 }
 
 impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
-    /// Initialize an empty gap buffer
+    /// Initialize an empty gap buffer with the default state of the grower
     #[inline(always)]
     pub fn new() -> GrowingGapBuf<T, G>
     where
@@ -176,7 +176,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// of the buffer the buffers length can be provided as the position.
     ///
     /// # Panics
-    /// If the provided position > len panics.
+    /// If the provided position is greater than [`GrowingGapBuf::len`] panics.
     #[inline]
     pub fn insert_many<I: Iterator<Item = T>>(&mut self, mut iter: I, at: usize) {
         let mut hint = iter.size_hint().0.max(1);
@@ -203,10 +203,6 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
         let r = get_range(self.raw.len(), r)?;
         self.raw.move_gap_start_to(r.end);
 
-        // SAFETY: the shrunken portion of the start slice is moved into Drain
-        // this part is now considered removed by the buffer
-        // we have also done the necessary range checks above, and moved the gap to the end of the range
-        // it is now safe safe to shrink as Drain has taken ownership of this portion of the buffer
         let drain_ptr = self.raw.shrink_start(r.len());
 
         Some(Drain {
