@@ -197,6 +197,8 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// The drain is an [`Iterator`] of owned T's. Usage wise this is the same as [`Vec::drain`]
     /// except for gap buffers.
     ///
+    /// Returns [`None`] if the provided range is out of bounds.
+    ///
     /// See [`Drain`] for its available methods.
     #[inline(always)]
     pub fn drain<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<Drain<'_, T>> {
