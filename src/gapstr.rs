@@ -115,7 +115,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         unsafe { Some([from_utf8_unchecked_mut(start), from_utf8_unchecked_mut(end)]) }
     }
 
-    /// Returns a contigious slice from the gap buffer
+    /// Returns a contiguous slice from the gap buffer
     ///
     /// The slice is constructed by shifting the elements to a position that leaves the requested
     /// range as a single slice. This isn't recommended as it will move the gap and can have a
@@ -133,7 +133,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         unsafe { Some(from_utf8_unchecked(s)) }
     }
 
-    /// Returns a contigious slice from the gap buffer
+    /// Returns a contiguous slice from the gap buffer
     ///
     /// Same as [`GrowingGapString::get_slice`] but returns a mutable reference.
     #[inline]
