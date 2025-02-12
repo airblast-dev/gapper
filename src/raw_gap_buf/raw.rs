@@ -1,6 +1,5 @@
 use std::{
-    alloc::{self, handle_alloc_error, Layout},
-    mem::{size_of, transmute, MaybeUninit},
+    mem::{size_of, MaybeUninit},
     num::NonZeroUsize,
     ops::Range,
     ptr::NonNull,
@@ -752,42 +751,31 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         let gap_len = self.gap_len();
         let end_len = self.end_len();
-        let layout = self.layout();
-        let new_layout = Layout::array::<T>(start_len + end_len + gap_len + by)
-            .expect("unable to initialize layout for realloc");
-        if new_layout.size() == 0 {
-            *self = Self::new();
-            return;
-        }
-
-        let Some(start_ptr) = NonNull::new(unsafe {
-            // SAFETY: we know that we already allocated due to the size
-            if layout.size() > 0 {
-                alloc::realloc(
-                    self.start_ptr().as_ptr().cast::<u8>(),
-                    layout,
-                    new_layout.size(),
+        let mut v = unsafe {
+            Box::from_raw(
+                NonNull::slice_from_raw_parts(
+                    self.start_ptr_mut().cast::<MaybeUninit<T>>(),
+                    self.total_len(),
                 )
-            } else {
-                // SAFETY: we already checked if the new layouts size is zero and returned early if
-                // so
-                alloc::alloc(new_layout)
-            }
-        })
-        .map(NonNull::cast::<T>) else {
-            handle_alloc_error(new_layout);
-        };
+                .as_ptr(),
+            )
+        }
+        .into_vec();
+
+        v.reserve_exact(by);
+        unsafe { v.set_len(start_len + gap_len + end_len + by) };
+
+        let b = v.into_boxed_slice();
+        let start_ptr: NonNull<T> = NonNull::from(Box::leak(b)).cast::<T>();
+        let old_end = unsafe { start_ptr.add(start_len + gap_len) };
+        let end_ptr: NonNull<T> = unsafe { old_end.add(by) };
+        unsafe { old_end.copy_to(end_ptr, end_len) };
 
         // TODO: once the allocator API is stabilized use grow or similar methods
         self.start = NonNull::slice_from_raw_parts(start_ptr, start_len);
         // SAFETY: these are part of the same allocation so no wrapping or such can occur
-        let old_end = unsafe { self.start_ptr().add(start_len + gap_len) };
-        self.end = NonNull::slice_from_raw_parts(
-            unsafe { self.start_ptr().add(start_len + gap_len + by) },
-            end_len,
-        );
+        self.end = NonNull::slice_from_raw_parts(end_ptr, end_len);
         // SAFETY: the realloc call copied the bytes, these values are now initialized
-        unsafe { old_end.copy_to(self.end_ptr(), end_len) };
         self.move_gap_start_to(at);
     }
 
@@ -802,10 +790,6 @@ impl<T> RawGapBuf<T> {
         let start_len = self.start_len();
         let end_len = self.end_len();
         let total_len = start_len + gap_len + end_len;
-        let layout = self.layout();
-        let new_size = (total_len - by)
-            .checked_mul(size_of::<T>())
-            .expect("unable to allocate space for more than isize::MAX bytes");
 
         unsafe {
             let gap_ptr = self.start_ptr().add(self.start_len() + gap_len - by);
@@ -813,28 +797,29 @@ impl<T> RawGapBuf<T> {
             // SAFETY: both are valid for enough read and writes
             self.end_ptr().copy_to(gap_ptr, self.end_len());
 
-            // SAFETY: the pointer is properly aligned and does point to allocated memory as we have
-            // checked the size above
-            let Some(new_ptr) = NonNull::new(alloc::realloc(
-                self.start_ptr().as_ptr().cast::<u8>(),
-                layout,
-                new_size,
-            ))
-            .map(NonNull::cast::<T>) else {
-                // never should panic as we are shrinking the old layout
-                handle_alloc_error(Layout::array::<T>(total_len - by).unwrap());
-            };
+            let b = Box::from_raw(
+                NonNull::slice_from_raw_parts(
+                    self.start_ptr_mut().cast::<MaybeUninit<T>>(),
+                    total_len,
+                )
+                .as_ptr(),
+            );
+
+            let mut v = b.into_vec();
+
+            // SAFETY: we are storing uninits in it anyway
+            v.set_len(total_len - by);
+
+            let buf = Box::leak(v.into_boxed_slice());
+
+            let new_ptr = NonNull::from(buf).cast::<T>();
 
             self.start = NonNull::slice_from_raw_parts(new_ptr, start_len);
             // SAFETY: points to the same allocation but now with the end slice at its shifted
             // location
-            self.end = NonNull::slice_from_raw_parts(new_ptr.add(start_len + gap_len - by), end_len)
+            self.end =
+                NonNull::slice_from_raw_parts(new_ptr.add(start_len + gap_len - by), end_len);
         }
-    }
-
-    fn layout(&self) -> Layout {
-        // SAFETY: we have already validated the layout during allocation
-        unsafe { Layout::array::<T>(self.total_len()).unwrap_unchecked() }
     }
 }
 
