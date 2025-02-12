@@ -424,11 +424,6 @@ impl<T> RawGapBuf<T> {
     pub fn grow_start_with(&mut self, val: T) {
         if self.gap_len() == 0 {
             self.grow_gap(1);
-            #[cfg(test)]
-            unreachable!(
-                "caller should allocate before calling this method to avoid multiple reallocations"
-            );
-            self.grow_gap(1);
         }
 
         self.spare_capacity_mut()[0].write(val);
@@ -443,13 +438,7 @@ impl<T> RawGapBuf<T> {
     where
         T: Copy,
     {
-        assert!(self.gap_len() >= val.len());
         if self.gap_len() < val.len() {
-            self.grow_gap(1);
-            #[cfg(test)]
-            unreachable!(
-                "caller should allocate before calling this method to avoid multiple reallocations"
-            );
             self.grow_gap(val.len());
         }
 
