@@ -159,11 +159,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
 
     /// Returns both sides of the gap buffer as mutable slices
     #[inline(always)]
-    pub fn get_parts_mut(&mut self) -> [&str; 2] {
+    pub fn get_parts_mut(&mut self) -> [&mut str; 2] {
         self.buf.get_parts_mut().map(|s| unsafe {
             // SAFETY: we do not allow the gap to be positioned between char boundaries both
             // parts are always valid UTF-8 string slice
-            from_utf8_unchecked(s)
+            from_utf8_unchecked_mut(s)
         })
     }
 
