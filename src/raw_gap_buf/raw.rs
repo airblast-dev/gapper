@@ -801,8 +801,6 @@ impl<T> RawGapBuf<T> {
             let new_ptr = NonNull::from(buf).cast::<T>();
 
             self.start = NonNull::slice_from_raw_parts(new_ptr, start_len);
-            // SAFETY: points to the same allocation but now with the end slice at its shifted
-            // location
             self.end =
                 NonNull::slice_from_raw_parts(new_ptr.add(start_len + gap_len - by), end_len);
         }
