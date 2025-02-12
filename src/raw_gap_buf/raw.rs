@@ -314,11 +314,6 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub const fn start_mut(&mut self) -> NonNull<[T]> {
-        self.start
-    }
-
-    #[inline(always)]
     pub const fn start_len(&self) -> usize {
         self.start().len()
     }
@@ -329,17 +324,7 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub const fn end_ptr_mut(&mut self) -> NonNull<T> {
-        self.end.cast()
-    }
-
-    #[inline(always)]
     pub const fn end(&self) -> NonNull<[T]> {
-        self.end
-    }
-
-    #[inline(always)]
-    pub const fn end_mut(&mut self) -> NonNull<[T]> {
         self.end
     }
 
@@ -568,24 +553,6 @@ impl<T> RawGapBuf<T> {
                 self.end_ptr().offset(by),
                 self.end_len().checked_add_signed(-by).unwrap_unchecked(),
             );
-        }
-    }
-
-    #[inline(always)]
-    pub fn start_with_offset(&self, start: usize) -> usize {
-        if start >= self.start_len() {
-            start + self.gap_len()
-        } else {
-            start
-        }
-    }
-
-    #[inline(always)]
-    pub fn end_with_offset(&self, end: usize) -> usize {
-        if end > self.start_len() {
-            end + self.gap_len()
-        } else {
-            end
         }
     }
 
@@ -894,6 +861,22 @@ mod tests {
             // SAFETY: after dropping the T's, self also gets dropped at the end of the function so no
             // access is performed to the inner T's
             unsafe { self.drop_t() };
+        }
+
+        pub fn start_with_offset(&self, start: usize) -> usize {
+            if start >= self.start_len() {
+                start + self.gap_len()
+            } else {
+                start
+            }
+        }
+
+        pub fn end_with_offset(&self, end: usize) -> usize {
+            if end > self.start_len() {
+                end + self.gap_len()
+            } else {
+                end
+            }
         }
     }
 
