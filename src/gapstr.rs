@@ -170,17 +170,16 @@ impl<G: Grower<str>> GrowingGapString<G> {
     #[inline(always)]
     fn is_get_char_boundary(&self, r: Range<usize>) -> bool {
         // TODO: this a mess
-        self.buf
-            .get(r.start)
-            .copied()
-            .is_some_and(u8_is_char_boundary)
-            && (self.buf.get(r.end).is_none()
-                || self
-                    .buf
-                    .get(r.end)
-                    .copied()
-                    .is_some_and(u8_is_char_boundary))
-            || (r.start == r.end && self.buf.len() >= r.start)
+        let len = self.len();
+        let start = matches!(
+            r.start.cmp(&len), 
+            Ordering::Less | Ordering::Equal 
+            if r.start <= r.end 
+                && self.buf.get(r.start).is_none_or(|b| u8_is_char_boundary(*b)));
+
+        start 
+            && len >= r.end 
+            && self.buf.get(r.end).is_none_or(|b| u8_is_char_boundary(*b))
     }
 
     /// Insert a string at the provided position
