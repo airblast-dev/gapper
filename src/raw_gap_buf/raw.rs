@@ -677,6 +677,9 @@ impl<T> RawGapBuf<T> {
     ///
     /// Determines the position to move the gap whilst moving it out of the range, and doing
     /// minimal copies.
+    ///
+    /// # Panics
+    /// If the start is greater than the end, or end is greater than [`RawGapBuf::total_len`].
     #[inline(always)]
     pub fn move_gap_out_of(&mut self, r: Range<usize>) {
         assert!(self.total_len() >= r.end && r.start <= r.end);
