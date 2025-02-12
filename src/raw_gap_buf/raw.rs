@@ -727,7 +727,6 @@ impl<T> RawGapBuf<T> {
 
     /// Reallocate the buffer and position the gap start at the provided position
     pub(crate) fn grow_gap_at(&mut self, by: usize, at: usize) {
-        // no need to check if size exceeds isize::MAX, layout returns error variant anyway
         assert!(self.len() >= at);
         if Self::IS_ZST {
             // fake the gap grow
@@ -761,11 +760,8 @@ impl<T> RawGapBuf<T> {
         let end_ptr: NonNull<T> = unsafe { old_end.add(by) };
         unsafe { old_end.copy_to(end_ptr, end_len) };
 
-        // TODO: once the allocator API is stabilized use grow or similar methods
         self.start = NonNull::slice_from_raw_parts(start_ptr, start_len);
-        // SAFETY: these are part of the same allocation so no wrapping or such can occur
         self.end = NonNull::slice_from_raw_parts(end_ptr, end_len);
-        // SAFETY: the realloc call copied the bytes, these values are now initialized
         self.move_gap_start_to(at);
     }
 
