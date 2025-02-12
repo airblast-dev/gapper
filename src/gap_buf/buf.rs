@@ -139,7 +139,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// [`GrowingGapBuf::get_slice`] instead.
     #[inline(always)]
     #[allow(clippy::wrong_self_convention)]
-    pub fn to_slice(&mut self) -> &[T] {
+    pub fn make_contiguous(&mut self) -> &[T] {
         self.raw.to_slice()
     }
 
@@ -147,7 +147,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     ///
     /// See [`GrowingGapBuf::to_slice`] for more information.
     #[inline(always)]
-    pub fn to_slice_mut(&mut self) -> &mut [T] {
+    pub fn make_contiguous_mut(&mut self) -> &mut [T] {
         self.raw.to_slice_mut()
     }
 
