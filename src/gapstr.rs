@@ -1,8 +1,7 @@
 use std::{
     cmp::Ordering,
-    marker::PhantomData,
-    ops::{Deref, DerefMut, Range, RangeBounds},
-    str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
+    ops::{Range, RangeBounds},
+    str::{from_utf8_unchecked, from_utf8_unchecked_mut},
 };
 
 use crate::{
