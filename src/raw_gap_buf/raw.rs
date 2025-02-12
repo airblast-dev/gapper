@@ -233,8 +233,9 @@ impl<T> RawGapBuf<T> {
     pub fn get_range(&self, r: Range<usize>) -> Option<[&[T]; 2]> {
         let len = self.len();
         let r = get_range(len, r)?;
+        let start_len = self.start_len();
 
-        if is_get_single(self.start_len(), r.start, r.end) {
+        if is_get_single(start_len, r.start, r.end) {
             let [start, end] = self.get_parts();
             if r.start >= self.start_len() {
                 let start_len = self.start_len();
@@ -245,7 +246,7 @@ impl<T> RawGapBuf<T> {
         }
 
         let [start, end] = self.get_parts();
-        Some([&start[r.start..], &end[0..r.end - self.start_len()]])
+        Some([&start[r.start..], &end[0..r.end - start_len]])
     }
 
     #[inline(always)]
