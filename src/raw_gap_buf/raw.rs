@@ -219,8 +219,8 @@ impl<T> RawGapBuf<T> {
     pub fn get_slice(&mut self, r: Range<usize>) -> Option<&mut [T]> {
         let r = get_range(self.len(), r)?;
         self.move_gap_out_of(r.start..r.end);
-        debug_assert!(is_get_single(self.start_len(), r.start, r.end));
         let start_len = self.start_len();
+        debug_assert!(is_get_single(start_len, r.start, r.end));
         let [start, end] = self.get_parts_mut();
         if r.start >= start_len {
             Some(&mut end[r.start - start_len..r.len()])
@@ -229,6 +229,9 @@ impl<T> RawGapBuf<T> {
         }
     }
 
+    /// Get the slices in the provided range
+    ///
+    /// Returns None if the range is out of bounds.
     #[inline(always)]
     pub fn get_range(&self, r: Range<usize>) -> Option<[&[T]; 2]> {
         let len = self.len();
@@ -237,8 +240,7 @@ impl<T> RawGapBuf<T> {
 
         if is_get_single(start_len, r.start, r.end) {
             let [start, end] = self.get_parts();
-            if r.start >= self.start_len() {
-                let start_len = self.start_len();
+            if r.start >= start_len {
                 return Some([&[], &end[r.start - start_len..r.end - start_len]]);
             } else {
                 return Some([&start[r.start..r.end], &[]]);
@@ -249,6 +251,9 @@ impl<T> RawGapBuf<T> {
         Some([&start[r.start..], &end[0..r.end - start_len]])
     }
 
+    /// Get the mutable slices in the provided range
+    ///
+    /// Returns None if the range is out of bounds.
     #[inline(always)]
     pub fn get_range_mut(&mut self, r: Range<usize>) -> Option<[&mut [T]; 2]> {
         let len = self.len();
@@ -407,6 +412,9 @@ impl<T> RawGapBuf<T> {
     /// # Safety
     /// Caller must ensure that the values are initialized, and that growing the start does not
     /// cause overlapping with the end.
+    ///
+    /// # Panics
+    /// If growing start causes an overlap with the end pointer.
     #[inline(always)]
     pub unsafe fn grow_start(&mut self, by: usize) {
         let start_len = self.start_len();
@@ -629,7 +637,9 @@ impl<T> RawGapBuf<T> {
                 src = NonNull::from(&end[0..copy_count]).cast::<T>();
                 dst = NonNull::from(&mut spare[0..copy_count]).cast::<MaybeUninit<T>>();
                 shift = copy_count as isize;
-            } else {
+            }
+            // nonoverlapping copy it is
+            else {
                 // move gap right
                 let (src, dst, copy_count) = if to >= self.start_len() {
                     copy_count = to - self.start_len();
@@ -793,7 +803,7 @@ impl<T> RawGapBuf<T> {
 
             let mut v = b.into_vec();
 
-            // We don't explicity shrink the bufferas it is already handled in the conversion to a
+            // We don't explicity shrink the buffer as it is already handled in the conversion to a
             // box slice below.
             // SAFETY: we are storing uninits anyway
             v.set_len(total_len - by);
@@ -827,7 +837,7 @@ where
         for (i, item) in end.iter().enumerate() {
             end_slice[i].write(item.clone());
         }
-        let end_ptr = NonNull::from(&mut *end_slice).cast::<T>();
+        let end_ptr = NonNull::from(end_slice).cast::<T>();
 
         let leaked = NonNull::from(Box::leak(alloc_box)).cast::<T>();
         Self {
