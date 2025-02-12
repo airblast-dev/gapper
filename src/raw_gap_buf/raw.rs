@@ -5,8 +5,6 @@ use std::{
     ptr::NonNull,
 };
 
-use bytemuck::cast_slice;
-
 use crate::utils::{get_range, is_get_single};
 
 /// Similar to RawVec used in the standard library, this is our inner struct
@@ -484,45 +482,6 @@ impl<T> RawGapBuf<T> {
         unsafe { self.shrink_start(by).as_mut() }
     }
 
-    /// Grow the end slice by the provided value
-    ///
-    /// # Safety
-    /// Caller must ensure that the values before the end pointer are initialized, does not
-    /// overlap with the start slice and that the pointer has enough provenance.
-    #[inline(always)]
-    pub unsafe fn grow_end(&mut self, by: usize) {
-        let end_len = self.end_len();
-
-        if !Self::IS_ZST {
-            assert!(
-                self.gap_len() >= by,
-                "cannot grow the end slice when the grow overlaps with the start slice"
-            );
-        }
-        let t_ptr = unsafe { self.end_ptr().sub(by) };
-        self.end = NonNull::slice_from_raw_parts(t_ptr, end_len + by);
-    }
-
-    /// Shrink the end slice by the provided value
-    ///
-    /// # Safety
-    /// Caller must ensure that the values are correctly dropped, the end length >= by, and that
-    /// the pointer has enough provenance.
-    #[inline(always)]
-    pub unsafe fn shrink_end(&mut self, by: usize) -> NonNull<[T]> {
-        let end_len = self.end_len();
-
-        // ensure shrinking the slice does not point out of bounds
-        assert!(
-            end_len >= by,
-            "cannot shrink start slice when shrink value is more than the total length"
-        );
-        let old_end = self.end_ptr();
-        let t_ptr = unsafe { self.end_ptr().add(by) };
-        self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
-        NonNull::slice_from_raw_parts(old_end, by)
-    }
-
     /// Shifts the gap by the provided value
     ///
     /// # Safety
@@ -853,6 +812,8 @@ impl<T> Drop for RawGapBuf<T> {
 #[cfg(test)]
 mod tests {
 
+    use std::ptr::NonNull;
+
     use super::RawGapBuf;
 
     impl<T> RawGapBuf<T> {
@@ -877,6 +838,48 @@ mod tests {
             } else {
                 end
             }
+        }
+        
+        // the methods below could included outside of tests but nothing uses them at the moment
+
+        /// Grow the end slice by the provided value
+        ///
+        /// # Safety
+        /// Caller must ensure that the values before the end pointer are initialized, does not
+        /// overlap with the start slice and that the pointer has enough provenance.
+        #[inline(always)]
+        pub unsafe fn grow_end(&mut self, by: usize) {
+            let end_len = self.end_len();
+
+            if !Self::IS_ZST {
+                assert!(
+                    self.gap_len() >= by,
+                    "cannot grow the end slice when the grow overlaps with the start slice"
+                );
+            }
+            let t_ptr = unsafe { self.end_ptr().sub(by) };
+            self.end = NonNull::slice_from_raw_parts(t_ptr, end_len + by);
+        }
+
+        /// Shrink the end slice by the provided value
+        ///
+        /// # Safety
+        /// Caller must ensure that the values are correctly dropped, the end length >= by, and that
+        /// the pointer has enough provenance.
+        #[allow(unused)]
+        #[inline(always)]
+        pub unsafe fn shrink_end(&mut self, by: usize) -> NonNull<[T]> {
+            let end_len = self.end_len();
+
+            // ensure shrinking the slice does not point out of bounds
+            assert!(
+                end_len >= by,
+                "cannot shrink start slice when shrink value is more than the total length"
+            );
+            let old_end = self.end_ptr();
+            let t_ptr = unsafe { self.end_ptr().add(by) };
+            self.end = NonNull::slice_from_raw_parts(t_ptr, end_len - by);
+            NonNull::slice_from_raw_parts(old_end, by)
         }
     }
 

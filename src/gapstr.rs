@@ -84,7 +84,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// Returns true if the buffer is empty
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.buf.is_empty()
     }
 
     /// Same as [`str::get`] but for gap buffers
