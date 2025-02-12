@@ -766,13 +766,13 @@ impl<T> RawGapBuf<T> {
     }
 
     pub fn shrink_gap(&mut self, by: usize) {
-        if Self::IS_ZST {
+        if Self::IS_ZST || by == 0 {
             return;
         }
 
         let gap_len = self.gap_len();
 
-        assert!(gap_len >= by && by > 0);
+        assert!(gap_len >= by);
         let start_len = self.start_len();
         let end_len = self.end_len();
         let total_len = start_len + gap_len + end_len;
