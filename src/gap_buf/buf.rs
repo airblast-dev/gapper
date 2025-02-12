@@ -35,9 +35,9 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// or shrinking the gap buffer. This allows you to provide your own [`Grower`] to limit how
     /// much extra capacity can be allocated.
     #[inline(always)]
-    pub fn with_grower(grower: G) -> Self {
+    pub const fn with_grower(grower: G) -> Self {
         Self {
-            raw: Default::default(),
+            raw: RawGapBuf::new(),
             grower,
         }
     }
