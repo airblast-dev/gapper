@@ -793,7 +793,9 @@ impl<T> RawGapBuf<T> {
 
             let mut v = b.into_vec();
 
-            // SAFETY: we are storing uninits in it anyway
+            // We don't explicity shrink the bufferas it is already handled in the conversion to a
+            // box slice below.
+            // SAFETY: we are storing uninits anyway
             v.set_len(total_len - by);
 
             let buf = Box::leak(v.into_boxed_slice());
