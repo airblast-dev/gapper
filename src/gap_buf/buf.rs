@@ -139,7 +139,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// [`GrowingGapBuf::get_slice`] instead.
     #[inline(always)]
     pub fn make_contiguous(&mut self) -> &[T] {
-        self.raw.to_slice()
+        self.raw.make_contiguous()
     }
 
     /// Same as [`GrowingGapBuf::make_contiguous`] but returns a mutable slice
@@ -147,7 +147,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// See [`GrowingGapBuf::make_contiguous`] for more information.
     #[inline(always)]
     pub fn make_contiguous_mut(&mut self) -> &mut [T] {
-        self.raw.to_slice_mut()
+        self.raw.make_contiguous_mut()
     }
 
     /// Insert T at the provided position

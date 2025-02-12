@@ -271,8 +271,7 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    #[allow(clippy::wrong_self_convention)]
-    pub fn to_slice(&mut self) -> &[T] {
+    pub fn make_contiguous(&mut self) -> &[T] {
         self.move_gap_out_of(0..self.len());
         let [start, end] = self.get_parts();
         if !start.is_empty() {
@@ -283,7 +282,7 @@ impl<T> RawGapBuf<T> {
     }
 
     #[inline(always)]
-    pub fn to_slice_mut(&mut self) -> &mut [T] {
+    pub fn make_contiguous_mut(&mut self) -> &mut [T] {
         self.move_gap_out_of(0..self.len());
         let [start, end] = self.get_parts_mut();
         if !start.is_empty() {
@@ -1091,23 +1090,23 @@ mod tests {
     #[test]
     fn to_slice() {
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([], 0, []);
-        let s = s_buf.to_slice();
+        let s = s_buf.make_contiguous();
         assert!(s.is_empty());
 
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 0, [4, 5, 6]);
-        let s = s_buf.to_slice();
+        let s = s_buf.make_contiguous();
         assert_eq!(s, &[1, 2, 3, 4, 5, 6]);
 
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, []);
-        let s = s_buf.to_slice();
+        let s = s_buf.make_contiguous();
         assert_eq!(s, &[1, 2, 3]);
 
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([], 1, [1, 2, 3]);
-        let s = s_buf.to_slice();
+        let s = s_buf.make_contiguous();
         assert_eq!(s, &[1, 2, 3]);
 
         let mut s_buf: RawGapBuf<u8> = RawGapBuf::new_with([1, 2, 3], 1, [4, 5, 6, 7, 8]);
-        let s = s_buf.to_slice();
+        let s = s_buf.make_contiguous();
         assert_eq!(s, &[1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
