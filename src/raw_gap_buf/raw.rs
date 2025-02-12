@@ -454,7 +454,8 @@ impl<T> RawGapBuf<T> {
 
     /// Shrink the start slice by the provided value
     ///
-    /// Caller must deal with T's drop code.
+    /// Returns the shrunken portion of the start slice as a pointer.
+    /// Caller must deal with T's drop code. To avoid memory leaks.
     ///
     /// # Panics
     ///
@@ -469,7 +470,7 @@ impl<T> RawGapBuf<T> {
 
     /// Shrink the start slice by the provided value
     ///
-    /// Caller must deal with T's drop code.
+    /// Returns the shrunken portion of the start slice.
     ///
     /// # Panics
     ///
