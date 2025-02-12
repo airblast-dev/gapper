@@ -311,7 +311,7 @@ mod tests {
         assert_eq!(s_buf.get(0).unwrap(), "3");
         assert_eq!(s_buf.get(1), None);
         assert_eq!(s_buf.get(2), None);
-        assert_eq!(s_buf.to_slice(), &["3"]);
+        assert_eq!(s_buf.make_contiguous(), &["3"]);
 
         let drain = s_buf.drain(0..0).unwrap();
         assert_eq!(drain.as_slice(), ([] as [String; 0]).as_slice());
@@ -324,7 +324,7 @@ mod tests {
         assert_eq!(s_buf.get(0).unwrap(), "4");
         assert_eq!(s_buf.get(1), None);
         assert_eq!(s_buf.get(2), None);
-        assert_eq!(s_buf.to_slice(), &["4"]);
+        assert_eq!(s_buf.make_contiguous(), &["4"]);
     }
 
     #[apply(grower_template)]
