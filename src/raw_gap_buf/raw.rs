@@ -5,6 +5,8 @@ use std::{
     ptr::NonNull,
 };
 
+use bytemuck::cast_slice;
+
 use crate::utils::{get_range, is_get_single};
 
 /// Similar to RawVec used in the standard library, this is our inner struct
@@ -444,10 +446,10 @@ impl<T> RawGapBuf<T> {
             self.grow_gap(val.len());
         }
 
-        let spare = self.spare_capacity_mut();
-        for (i, val) in val.iter().copied().enumerate() {
-            spare[i].write(val);
-        }
+        let dst = self.spare_capacity_ptr().cast::<MaybeUninit<T>>();
+        unsafe {
+            dst.copy_from_nonoverlapping(NonNull::from(val).cast::<MaybeUninit<T>>(), val.len())
+        };
 
         unsafe {
             self.grow_start(val.len());
