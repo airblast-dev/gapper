@@ -5,8 +5,6 @@ use std::{
     str::{from_utf8_unchecked, from_utf8_unchecked_mut, Chars},
 };
 
-use bytemuck::must_cast_slice;
-
 use crate::{
     grower::{DefaultGrower, Grower},
     raw_gap_buf::RawGapBuf,
@@ -167,19 +165,18 @@ impl<G: Grower<str>> GrowingGapString<G> {
         })
     }
 
+    /// Checks if the provided range is on a char boundary
     #[inline(always)]
     fn is_get_char_boundary(&self, r: Range<usize>) -> bool {
-        // TODO: this a mess
         let len = self.len();
-        let start = matches!(
-            r.start.cmp(&len), 
-            Ordering::Less | Ordering::Equal 
-            if r.start <= r.end 
-                && self.buf.get(r.start).is_none_or(|b| u8_is_char_boundary(*b)));
-
-        start 
-            && len >= r.end 
-            && self.buf.get(r.end).is_none_or(|b| u8_is_char_boundary(*b))
+        matches!(
+            r.start.cmp(&len),
+            Ordering::Less | Ordering::Equal
+            if r.start <= r.end
+                && self.buf.get(r.start).is_none_or(|b| u8_is_char_boundary(*b))
+                && len >= r.end
+                && self.buf.get(r.end).is_none_or(|b| u8_is_char_boundary(*b))
+        )
     }
 
     /// Insert a string at the provided position
@@ -189,7 +186,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// on a char boundary.
     pub fn insert(&mut self, s: &str, at: usize) {
         assert!(
-            self.buf.get(at).copied().is_some_and(u8_is_char_boundary) || self.buf.len() == at,
+            self.is_get_char_boundary(at..at),
             "insertion should always be on a char boundary"
         );
         // polonius moment
@@ -225,18 +222,16 @@ impl<G: Grower<str>> GrowingGapString<G> {
             .expect("range should never be out of bounds when draining");
         assert!(self.is_get_char_boundary(r.start..r.end));
 
-        {
-            let [start, end] = self
-                .buf
-                .get_parts()
-                .map(|s| unsafe { from_utf8_unchecked(s) });
+        let [start, end] = self
+            .buf
+            .get_parts()
+            .map(|s| unsafe { from_utf8_unchecked(s) });
 
-            let max_gap_size = self.grower.max_gap_size(start, end);
-            let gap_len = self.gap_len();
-            if gap_len > max_gap_size {
-                let new_gap_size = self.grower.base_gap_size(start, end).min(max_gap_size);
-                self.shrink_gap(gap_len - new_gap_size);
-            }
+        let max_gap_size = self.grower.max_gap_size(start, end);
+        let gap_len = self.gap_len();
+        if gap_len > max_gap_size {
+            let new_gap_size = self.grower.base_gap_size(start, end).min(max_gap_size);
+            self.shrink_gap(gap_len - new_gap_size);
         }
 
         self.buf.move_gap_start_to(r.end);
@@ -278,10 +273,9 @@ impl<G: Grower<str>> GrowingGapString<G> {
                 let start = &mut self.buf.get_parts_mut()[0];
                 let (pre, post) = s.as_bytes().split_at(r.len());
                 start[r.start..r.start + pre.len()].copy_from_slice(pre);
-                self.buf.grow_start_with_slice(must_cast_slice(post));
+                self.buf.grow_start_with_slice(post);
             }
             Ordering::Equal => {
-                // SAFETY: we just checked the bounds above
                 self.buf
                     .get_slice(r.start..r.end)
                     .expect("we checked the range bounds above, this should never panic")
@@ -303,26 +297,11 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// This is the equivalent of [`String::shrink_to`] from the standard library. The provided
     /// [`Grower`] will handle shrinking by default but this method allows you to shrink the gap
     /// explicitly.
+    ///
+    /// # Panics
+    /// If the provided value is greater than [`GrowingGapString::gap_len`].
     pub fn shrink_gap(&mut self, by: usize) {
         self.buf.shrink_gap(by);
-    }
-}
-
-pub struct Drain<'a> {
-    chars: Chars<'static>,
-    __p: PhantomData<&'a str>,
-}
-
-impl Deref for Drain<'_> {
-    type Target = Chars<'static>;
-    fn deref(&self) -> &Self::Target {
-        &self.chars
-    }
-}
-
-impl DerefMut for Drain<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.chars
     }
 }
 

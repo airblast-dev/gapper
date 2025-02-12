@@ -7,6 +7,3 @@ edition = "2021"
 rstest = "0.24.0"
 rstest_reuse = "0.7.0"
 rand = "0.9.0"
-
-[dependencies]
-bytemuck = { version = "1.21.0", features = ["zeroable_maybe_uninit", "must_cast", "min_const_generics"] }

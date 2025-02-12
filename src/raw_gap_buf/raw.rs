@@ -686,20 +686,33 @@ impl<T> RawGapBuf<T> {
         }
         .into_vec();
 
+        // reserve_exact can overallocate a bit, set the length to an exact value so calling
+        // into_boxed_slice gives us an allocation that is the correct size
+        //
+        // normally it would be better to just fill the vec with uninits but we cant do that here
+        // due to its trait bounds
         v.reserve_exact(by);
         unsafe { v.set_len(start_len + gap_len + end_len + by) };
 
         let b = v.into_boxed_slice();
         let start_ptr: NonNull<T> = NonNull::from(Box::leak(b)).cast::<T>();
-        let old_end = unsafe { start_ptr.add(start_len + gap_len) };
-        let end_ptr: NonNull<T> = unsafe { old_end.add(by) };
-        unsafe { old_end.copy_to(end_ptr, end_len) };
+
+        let end_ptr = unsafe {
+            let old_end = start_ptr.add(start_len + gap_len);
+            let end_ptr = old_end.add(by);
+            old_end.copy_to(end_ptr, end_len);
+            end_ptr
+        };
 
         self.start = NonNull::slice_from_raw_parts(start_ptr, start_len);
         self.end = NonNull::slice_from_raw_parts(end_ptr, end_len);
         self.move_gap_start_to(at);
     }
 
+    /// Shrink the gap by the provided value
+    ///
+    /// # Panics
+    /// If the provided value is greater than the current gap size.
     pub fn shrink_gap(&mut self, by: usize) {
         if Self::IS_ZST || by == 0 {
             return;
@@ -707,7 +720,10 @@ impl<T> RawGapBuf<T> {
 
         let gap_len = self.gap_len();
 
-        assert!(gap_len >= by);
+        assert!(
+            gap_len >= by,
+            "attempted to shrink gap more than its length"
+        );
         let start_len = self.start_len();
         let end_len = self.end_len();
         let total_len = start_len + gap_len + end_len;
@@ -838,7 +854,7 @@ mod tests {
                 end
             }
         }
-        
+
         // the methods below could included outside of tests but nothing uses them at the moment
 
         /// Grow the end slice by the provided value
