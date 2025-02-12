@@ -62,7 +62,7 @@ impl<T> RawGapBuf<T> {
             alloc_box[S + gap_size + i].write(item);
         }
 
-        let ptr = NonNull::from(&mut *alloc_box);
+        let ptr = NonNull::from(alloc_box);
         Self {
             start: NonNull::slice_from_raw_parts(ptr.cast::<T>(), S),
             end: NonNull::slice_from_raw_parts(
