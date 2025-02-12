@@ -662,7 +662,7 @@ impl<T> RawGapBuf<T> {
             }
 
             let src = src.cast::<MaybeUninit<T>>();
-            // debug assertion in case there is a logic error above
+            // assertion in case there is a logic error above
             assert!(
                 unsafe { src.offset_from(dst).unsigned_abs() >= copy_count },
                 "attempted to copy overlapping pointers"
