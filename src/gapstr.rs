@@ -89,7 +89,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
 
     /// Same as [`str::get`] but for gap buffers
     ///
-    /// Returns None if the range is out of bounds or is not on a char boundary.
+    /// Returns [`None`] if the range is out of bounds or is not on a char boundary.
     #[inline]
     pub fn get<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&str; 2]> {
         let r = get_range(self.buf.len(), r)?;
@@ -103,7 +103,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
 
     /// Same as [`str::get_mut`] but for gap buffers
     ///
-    /// Returns None if the range is out of bounds or is not on a char boundary.
+    /// Returns [`None`] if the range is out of bounds or is not on a char boundary.
     #[inline]
     pub fn get_mut<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<[&mut str; 2]> {
         let r = get_range(self.buf.len(), r)?;
@@ -121,7 +121,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
     /// range as a single slice. This isn't recommended as it will move the gap and can have a
     /// large cost in some cases. Prefer [`GrowingGapString::get`] wherever possible.
     ///
-    /// Returns None if the range is out of bounds or is not on a char boundary.
+    /// Returns [`None`] if the range is out of bounds or is not on a char boundary.
     #[inline]
     pub fn get_slice<RB: RangeBounds<usize>>(&mut self, r: RB) -> Option<&str> {
         let r = get_range(self.buf.len(), r)?;
