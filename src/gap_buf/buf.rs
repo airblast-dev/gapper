@@ -79,7 +79,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// This will account for the gap so you must provide the index as if you were indexing into a
     /// normal slice.
     ///
-    /// Returns None if index is out of bounds.
+    /// Returns [`None`] if index is out of bounds.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<&T> {
         self.raw.get(index)
@@ -138,7 +138,6 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// strictly need need a contiguous slice, but only for a specific range, use
     /// [`GrowingGapBuf::get_slice`] instead.
     #[inline(always)]
-    #[allow(clippy::wrong_self_convention)]
     pub fn make_contiguous(&mut self) -> &[T] {
         self.raw.to_slice()
     }
@@ -153,7 +152,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     /// Insert T at the provided position
     ///
-    /// # Panics 
+    /// # Panics
     ///
     /// If the provided position is greater than [`GrowingGapBuf::len`].
     #[inline]
