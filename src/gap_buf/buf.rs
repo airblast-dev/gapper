@@ -58,7 +58,12 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     /// Moves the gap out of the provided range
     ///
-    /// Returns without modifying the gap if it can already be contiguously read.
+    /// Returns without modifying the gap is already not in the provided range.
+    ///
+    /// # Panics
+    ///
+    /// If the range start is greater than the end or any of them are greater than
+    /// [`GrowingGapBuf::len`].
     #[inline]
     pub fn move_gap_out_of<RB: RangeBounds<usize>>(&mut self, r: RB) {
         let r = get_range(self.len(), r).expect("provided ranges should never be out of bounds");
@@ -68,7 +73,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// Moves the gap's start to the provided position
     ///
     /// # Panics
-    /// Panics if the provided position > len.
+    /// Panics if the provided position is greater than len.
     #[inline]
     pub fn move_gap_start_to(&mut self, to: usize) {
         self.raw.move_gap_start_to(to);
@@ -98,7 +103,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     /// If the provided range is not out of bounds, returns two slices of T.
     /// The first one being before the gap, and the second one being after the gap.
     ///
-    /// If a single slice is needed [`GrowingGapBuf::get_slice`] can be used.
+    /// If a single contiguous slice is needed [`GrowingGapBuf::get_slice`] can be used.
     #[inline(always)]
     pub fn get_range<RB: RangeBounds<usize>>(&self, r: RB) -> Option<[&[T]; 2]> {
         let r = get_range(self.raw.len(), r)?;
@@ -107,7 +112,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     /// Get a slice of the values in the range
     ///
-    /// If the provided range is not out of bounds, returns a slice of T.
+    /// Returns [`None`] if the provided range is out of bounds.
     ///
     /// This method will perform the minimum copies needed to get a contiguous slice.
     ///
@@ -143,8 +148,6 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
     }
 
     /// Same as [`GrowingGapBuf::make_contiguous`] but returns a mutable slice
-    ///
-    /// See [`GrowingGapBuf::make_contiguous`] for more information.
     #[inline(always)]
     pub fn make_contiguous_mut(&mut self) -> &mut [T] {
         self.raw.make_contiguous_mut()

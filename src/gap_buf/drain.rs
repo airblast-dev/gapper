@@ -10,11 +10,14 @@ pub struct Drain<'a, T> {
 }
 
 impl<T> Drain<'_, T> {
+
+    /// Returns a slice of the remaining elements in the drain
     #[inline(always)]
     pub fn as_slice(&self) -> &[T] {
         unsafe { self.ptr.as_ref() }
     }
 
+    /// Returns a mutable slice of the remaining elements in the drain
     #[inline(always)]
     pub fn as_slice_mut(&mut self) -> &mut [T] {
         unsafe { self.ptr.as_mut() }
