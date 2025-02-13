@@ -2,7 +2,7 @@ use std::{marker::PhantomData, ops::RangeBounds};
 
 use crate::{grower::Grower, raw_gap_buf::RawGapBuf, utils::get_range};
 
-use super::drain::Drain;
+pub use super::drain::Drain;
 
 #[derive(Clone)]
 pub struct GrowingGapBuf<T, G: Grower<[T]>> {
