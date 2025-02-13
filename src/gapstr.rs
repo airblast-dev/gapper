@@ -126,6 +126,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         if !self.is_get_char_boundary(r.start..r.end) {
             return None;
         }
+
         let s = self.buf.get_slice(r)?;
         // SAFETY: we have checked if the range is on a char boundary above
         unsafe { Some(to_str(s)) }
@@ -140,6 +141,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         if !self.is_get_char_boundary(r.start..r.end) {
             return None;
         }
+
         let s = self.buf.get_slice(r)?;
         // SAFETY: we have checked if the range is on a char boundary above
         unsafe { Some(to_str_mut(s)) }
