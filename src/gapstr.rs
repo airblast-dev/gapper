@@ -1,3 +1,4 @@
+use core::str;
 use std::{
     cmp::Ordering,
     ops::{Range, RangeBounds},
@@ -95,7 +96,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
 
         let [start, end] = self.buf.get_range(r)?;
-        unsafe { Some([from_utf8_unchecked(start), from_utf8_unchecked(end)]) }
+        unsafe { Some([to_str(start), to_str(end)]) }
     }
 
     /// Same as [`str::get_mut`] but for gap buffers
@@ -109,7 +110,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
 
         let [start, end] = self.buf.get_range_mut(r)?;
-        unsafe { Some([from_utf8_unchecked_mut(start), from_utf8_unchecked_mut(end)]) }
+        unsafe { Some([to_str_mut(start), to_str_mut(end)]) }
     }
 
     /// Returns a contiguous slice from the gap buffer
@@ -127,7 +128,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
         let s = self.buf.get_slice(r)?;
         // SAFETY: we have checked if the range is on a char boundary above
-        unsafe { Some(from_utf8_unchecked(s)) }
+        unsafe { Some(to_str(s)) }
     }
 
     /// Returns a contiguous slice from the gap buffer
@@ -141,7 +142,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         }
         let s = self.buf.get_slice(r)?;
         // SAFETY: we have checked if the range is on a char boundary above
-        unsafe { Some(from_utf8_unchecked_mut(s)) }
+        unsafe { Some(to_str_mut(s)) }
     }
 
     /// Returns both sides of the gap buffer
@@ -150,7 +151,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         self.buf.get_parts().map(|s| unsafe {
             // SAFETY: we do not allow the gap to be positioned between char boundaries both
             // parts are always valid UTF-8 string slice
-            from_utf8_unchecked(s)
+            to_str(s)
         })
     }
 
@@ -160,7 +161,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         self.buf.get_parts_mut().map(|s| unsafe {
             // SAFETY: we do not allow the gap to be positioned between char boundaries both
             // parts are always valid UTF-8 string slice
-            from_utf8_unchecked_mut(s)
+            to_str_mut(s)
         })
     }
 
@@ -194,7 +195,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         let [start, end] = self.buf.get_parts().map(|s| unsafe {
             // SAFETY: we do not allow the gap to be positioned between char boundaries both
             // parts are always valid UTF-8 string slice
-            from_utf8_unchecked(s)
+            to_str(s)
         });
         if self.buf.gap_len() < s.len() {
             let new_gap_size = self
@@ -223,10 +224,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
             .expect("range should never be out of bounds when draining");
         assert!(self.is_get_char_boundary(r.start..r.end));
 
-        let [start, end] = self
-            .buf
-            .get_parts()
-            .map(|s| unsafe { from_utf8_unchecked(s) });
+        let [start, end] = self.buf.get_parts().map(|s| unsafe { to_str(s) });
 
         let max_gap_size = self.grower.max_gap_size(start, end);
         let gap_len = self.gap_len();
@@ -238,7 +236,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
         self.buf.move_gap_start_to(r.end);
         let removed = self.buf.shrink_start_with(r.len());
 
-        unsafe { from_utf8_unchecked(removed) }
+        unsafe { to_str(removed) }
     }
 
     /// Equivalent to [`String::replace_range`] from the standard library
@@ -259,10 +257,7 @@ impl<G: Grower<str>> GrowingGapString<G> {
             Ordering::Less => {
                 let needed_space = s.len() - r.len();
                 if self.buf.gap_len() < needed_space {
-                    let [start, end] = self
-                        .buf
-                        .get_parts()
-                        .map(|s| unsafe { from_utf8_unchecked(s) });
+                    let [start, end] = self.buf.get_parts().map(|s| unsafe { to_str(s) });
                     let new_gap_size = self
                         .grower
                         .base_gap_size(start, end)
@@ -304,6 +299,20 @@ impl<G: Grower<str>> GrowingGapString<G> {
     pub fn shrink_gap(&mut self, by: usize) {
         self.buf.shrink_gap(by);
     }
+}
+
+/// [`from_utf8_unchecked`] but panics in debug mode if the bytes are not UTF-8 encoded
+#[inline(always)]
+unsafe fn to_str(bytes: &[u8]) -> &str {
+    debug_assert!(str::from_utf8(bytes).is_ok());
+    from_utf8_unchecked(bytes)
+}
+
+/// [`from_utf8_unchecked_mut`] but panics in debug mode if the bytes are not UTF-8 encoded
+#[inline(always)]
+unsafe fn to_str_mut(bytes: &mut [u8]) -> &mut str {
+    debug_assert!(str::from_utf8(bytes).is_ok());
+    from_utf8_unchecked_mut(bytes)
 }
 
 #[cfg(test)]
