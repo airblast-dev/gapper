@@ -562,7 +562,7 @@ impl<T> RawGapBuf<T> {
                 dst = NonNull::from(&mut spare[0..copy_count]).cast::<MaybeUninit<T>>();
                 shift = copy_count as isize;
             }
-            // nonoverlapping copy it is
+            // noverlapping copy it is
             else {
                 // move gap right
                 let (src, dst, copy_count) = if to >= self.start_len() {
