@@ -26,6 +26,16 @@ jobs:
         with: 
           toolchain: nightly
           components: clippy rustfmt miri
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Quick Lint
         run: cargo check --all-features
       - name: Lint
@@ -36,13 +46,4 @@ jobs:
         uses: bnjbvr/cargo-machete@main
       - name: Miri Tests
         run: cargo +nightly miri test 
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        
+              
