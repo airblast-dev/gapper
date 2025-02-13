@@ -210,6 +210,8 @@ impl<G: Grower<str>> GrowingGapString<G> {
 
     /// Equivalent to [`String::drain`] from the standard library
     ///
+    /// Returns a string slice to the removed range.
+    ///
     /// Shifts the gap's start position to the end of the range, and returns the string slice at
     /// the provided range.
     ///
