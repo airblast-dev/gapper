@@ -10,8 +10,7 @@ use crate::utils::{get_range, is_get_single};
 /// Similar to RawVec used in the standard library, this is our inner struct
 ///
 /// Internally uses a boxed slice to allocate and deallocate. Once the allocator API is stabilized
-/// this should be changed to use an allocator instead. This also removes a bunch of checks we
-/// would normally have to do as the box will deal with it upon dropping.
+/// this should be changed to use an allocator instead.
 pub(crate) struct RawGapBuf<T> {
     /// Using NonNull for Null pointer optimization
     start: NonNull<[T]>,
