@@ -20,7 +20,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
+        with: 
+          toolchain: nightly
+          components: clippy rustfmt miri
       - name: Quick Lint
         run: cargo check --all-features
       - name: Lint
@@ -29,7 +32,6 @@ jobs:
         run: cargo test --all-features
       - name: Machete
         uses: bnjbvr/cargo-machete@main
-      - run: rustup component add miri
       - name: Miri Tests
         run: cargo +nightly miri test 
         
