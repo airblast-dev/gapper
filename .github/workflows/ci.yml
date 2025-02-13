@@ -6,11 +6,13 @@ on:
     paths:
       - '**.rs'
       - '**.toml'
+      - '**.yml'
   push:
     types: []
     paths:
       - '**.rs'
       - '**.toml'
+      - '**.yml'
 
 jobs:
   tests:
