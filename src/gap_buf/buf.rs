@@ -44,7 +44,7 @@ impl<T, G: Grower<[T]>> GrowingGapBuf<T, G> {
 
     /// Returns the total length of the buffer excluding the gap length
     #[inline(always)]
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.raw.len()
     }
 
